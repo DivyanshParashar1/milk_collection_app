@@ -133,7 +133,7 @@ export default function ReportsScreen({ navigation }: any) {
             <Text style={[styles.fCol, styles.fRight]}>Litres</Text>
             <Text style={[styles.fCol, styles.fRight]}>₹</Text>
           </View>
-          {farmers.map((f) => (
+          {farmers.filter(f => f.membercode !== 9999).map((f) => (
             <View key={f.membercode} style={styles.fRow}>
               <Text style={[styles.fCell, { flex: 0.6, fontWeight: '800', color: '#2a6fdb' }]}>{f.membercode}</Text>
               <Text style={[styles.fCell, { flex: 1.6 }]} numberOfLines={1}>{f.name ?? '—'}</Text>

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator, Switch } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, Switch } from 'react-native';
+import KeyboardAwareScreen from "../components/KeyboardAwareScreen";
 import { getSettings, saveSettings, AppSettings, DEFAULT_SETTINGS } from '../lib/settings';
 import { backupRateChart, restoreRateChart } from '../lib/sync';
 import { isThermalAvailable, scanBluetoothPrinters, printTestPage, PrinterDevice } from '../lib/thermal';
@@ -45,7 +46,7 @@ export default function SettingsScreen() {
   };
 
   return (
-    <ScrollView style={styles.wrap} contentContainerStyle={{ padding: 16 }}>
+    <KeyboardAwareScreen style={styles.wrap} contentContainerStyle={{ padding: 16 }}>
       <Text style={styles.label}>Dairy / society name (on slips & reports)</Text>
       <TextInput style={styles.input} value={s.societyName} onChangeText={(v) => setS({ ...s, societyName: v })} placeholder="My Dairy" placeholderTextColor="#9aa" />
 
@@ -136,7 +137,7 @@ export default function SettingsScreen() {
           ))}
         </>
       )}
-    </ScrollView>
+    </KeyboardAwareScreen>
   );
 }
 

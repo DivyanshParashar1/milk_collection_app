@@ -28,6 +28,8 @@ import KapatScreen from './src/screens/KapatScreen';
 import DatewiseReportScreen from './src/screens/DatewiseReportScreen';
 import UnionSaleScreen from './src/screens/UnionSaleScreen';
 import PaymentReportScreen from './src/screens/PaymentReportScreen';
+import SuperAdminScreen from './src/screens/SuperAdminScreen';
+import InventoryScreen from './src/screens/InventoryScreen';
 
 const Stack = createNativeStackNavigator();
 const green = '#1b9c66';
@@ -50,10 +52,15 @@ function Root() {
   if (loading) {
     return <View style={styles.center}><ActivityIndicator size="large" color={green} /></View>;
   }
+  
+  const isSuperAdmin = session?.user?.email === '8824753192@milkapp.local';
+
   return (
     <Stack.Navigator screenOptions={{ headerStyle: { backgroundColor: green }, headerTintColor: '#fff', headerTitleStyle: { fontWeight: '800' } }}>
       {!session ? (
         <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
+      ) : isSuperAdmin ? (
+        <Stack.Screen name="SuperAdmin" component={SuperAdminScreen} options={{ headerShown: false }} />
       ) : (
         <>
           <Stack.Screen name="Home" component={HomeScreen} options={{ title: '🥛 MilkApp' }} />
@@ -66,6 +73,7 @@ function Root() {
           <Stack.Screen name="MemberForm" component={MemberFormScreen} options={{ title: 'Add Farmer · किसान' }} />
           <Stack.Screen name="RateChart" component={RateChartScreen} options={{ title: 'Rate Chart · रेट' }} />
           <Stack.Screen name="Reports" component={ReportsScreen} options={{ title: 'Reports · रिपोर्ट' }} />
+          <Stack.Screen name="Inventory" component={InventoryScreen} options={{ title: 'Inventory · भंडार' }} />
           <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings · सेटिंग' }} />
           <Stack.Screen name="Subscription" component={SubscriptionScreen} options={{ title: 'Subscription' }} />
           <Stack.Screen name="Ledger" component={LedgerScreen} options={{ title: 'Ledger · जमा/उधार' }} />

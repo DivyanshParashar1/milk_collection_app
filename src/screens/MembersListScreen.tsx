@@ -15,8 +15,9 @@ export default function MembersListScreen({ navigation }: any) {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return members;
-    return members.filter(
+    const visible = members.filter((m) => m.membercode !== 9999);
+    if (!q) return visible;
+    return visible.filter(
       (m) => String(m.membercode).startsWith(q) || (m.name ?? '').toLowerCase().includes(q)
     );
   }, [members, query]);

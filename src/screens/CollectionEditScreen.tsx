@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import KeyboardAwareScreen from "../components/KeyboardAwareScreen";
 import { computeMilk, RateEntry } from '../lib/calc';
 import { getCollection, getMemberByCode, getRateChart } from '../lib/db';
 import { saveCollectionEdit, deleteCollection } from '../lib/sync';
@@ -82,7 +83,7 @@ export default function CollectionEditScreen({ route, navigation }: any) {
   if (!row) return <View style={styles.wrap} />;
 
   return (
-    <ScrollView style={styles.wrap} contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
+    <KeyboardAwareScreen style={styles.wrap} contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
       <View style={styles.head}>
         <Text style={styles.name}>{name}</Text>
         <Text style={styles.meta}>{row.collect_date} · {row.session === 0 ? 'Morning' : 'Evening'} · {row.synced ? 'synced' : 'not synced'}</Text>
@@ -109,7 +110,7 @@ export default function CollectionEditScreen({ route, navigation }: any) {
       <TouchableOpacity style={styles.delBtn} onPress={remove} disabled={busy}>
         <Text style={styles.delText}>Delete entry</Text>
       </TouchableOpacity>
-    </ScrollView>
+    </KeyboardAwareScreen>
   );
 }
 

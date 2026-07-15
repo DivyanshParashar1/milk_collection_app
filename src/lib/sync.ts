@@ -30,6 +30,7 @@ import {
   upsertUnionSaleFromServer,
 } from './db';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getSettings, saveSettings } from './settings';
 
 export type SyncResult = {
   pushedMembers: number;
@@ -307,6 +308,13 @@ export async function pullAll(): Promise<{ pulled: number; error?: string }> {
   let pulled = 0;
 
   try {
+    // --- sync society subscription status ---
+    const { data: soc } = await supabase.from('societies').select('subscription_end_date, is_active').eq('id', societyId).single();
+    if (soc) {
+      const s = await getSettings();
+      await saveSettings({ ...s, subscriptionEnd: soc.subscription_end_date, isActive: soc.is_active });
+    }
+
     // --- members ---
     const { data: members, error: e1 } = await supabase
       .from('members')

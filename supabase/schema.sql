@@ -12,6 +12,8 @@ create table if not exists societies (
   address      text,
   milk_id      int  default 0,                -- which milk-type config
   activated    boolean default true,
+  subscription_end_date timestamptz default (now() + interval '14 days'),
+  is_active    boolean default true,
   created_at   timestamptz default now()
 );
 
@@ -21,6 +23,7 @@ create table if not exists profiles (
   society_id  uuid references societies(id) on delete set null,
   full_name   text,
   role        text default 'operator',        -- operator | admin
+  is_super_admin boolean default false,
   created_at  timestamptz default now()
 );
 

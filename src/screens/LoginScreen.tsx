@@ -7,19 +7,25 @@ import { useAuth } from '../context/AuthContext';
 export default function LoginScreen() {
   const { signIn, signUp } = useAuth();
   const [mode, setMode] = useState<'in' | 'up'>('in');
-  const [email, setEmail] = useState('');
+  const [mobile, setMobile] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [busy, setBusy] = useState(false);
 
   const submit = async () => {
-    if (!email || !password) return Alert.alert('Missing', 'Enter email and password');
+    if (!mobile || !password) return Alert.alert('Missing', 'Enter mobile number and password');
+    if (mobile.length !== 10) return Alert.alert('Invalid', 'Enter a 10-digit mobile number');
+    
     setBusy(true);
+    const email = `${mobile}@milkapp.local`;
+
     try {
-      if (mode === 'in') await signIn(email.trim(), password);
-      else {
-        await signUp(email.trim(), password, fullName.trim());
-        Alert.alert('Check your email', 'Confirm your address, then sign in.');
+      if (mode === 'in') {
+        await signIn(email, password);
+      } else {
+        if (!fullName.trim()) return Alert.alert('Missing', 'Enter your full name to register');
+        await signUp(email, password, fullName.trim());
+        Alert.alert('Account Created', 'You can now sign in.');
         setMode('in');
       }
     } catch (e: any) {
@@ -37,9 +43,17 @@ export default function LoginScreen() {
       <View style={styles.card}>
         <Text style={styles.h}>{mode === 'in' ? 'Sign in' : 'Create account'}</Text>
         {mode === 'up' && (
-          <TextInput style={styles.input} placeholder="Full name" value={fullName} onChangeText={setFullName} placeholderTextColor="#9aa" />
+          <TextInput style={styles.input} placeholder="Dairy / Full name" value={fullName} onChangeText={setFullName} placeholderTextColor="#9aa" />
         )}
-        <TextInput style={styles.input} placeholder="Email" autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} placeholderTextColor="#9aa" />
+        <TextInput 
+          style={styles.input} 
+          placeholder="Mobile Number (10 digits)" 
+          keyboardType="phone-pad" 
+          maxLength={10}
+          value={mobile} 
+          onChangeText={setMobile} 
+          placeholderTextColor="#9aa" 
+        />
         <TextInput style={styles.input} placeholder="Password" secureTextEntry value={password} onChangeText={setPassword} placeholderTextColor="#9aa" />
 
         <TouchableOpacity style={styles.btn} onPress={submit} disabled={busy}>

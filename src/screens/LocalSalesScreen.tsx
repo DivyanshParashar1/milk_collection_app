@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator,
-} from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import KeyboardAwareScreen from "../components/KeyboardAwareScreen";
 import { useFocusEffect } from '@react-navigation/native';
 import { insertLocalSale, recentLocalSales, todayLocalSaleTotals, getLocalSaleRates } from '../lib/db';
 
@@ -68,7 +67,7 @@ export default function LocalSalesScreen({ navigation }: any) {
   };
 
   return (
-    <ScrollView style={styles.wrap} contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
+    <KeyboardAwareScreen style={styles.wrap} contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
       {/* Today totals */}
       <View style={styles.statsRow}>
         <View style={styles.stat}><Text style={styles.statVal}>{totals.quantity.toFixed(1)}</Text><Text style={styles.statLbl}>Litres today</Text></View>
@@ -132,7 +131,7 @@ export default function LocalSalesScreen({ navigation }: any) {
         </>
       )}
       <View style={{ height: 30 }} />
-    </ScrollView>
+    </KeyboardAwareScreen>
   );
 }
 

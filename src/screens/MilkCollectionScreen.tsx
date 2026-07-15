@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator,
+  View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator,
 } from 'react-native';
+import KeyboardAwareScreen from '../components/KeyboardAwareScreen';
+import { showHelp } from '../lib/help';
 import { useFocusEffect } from '@react-navigation/native';
 import { computeMilk, RateEntry } from '../lib/calc';
 import { getMemberByCode, getRateChart, insertCollection, recentCollections, isSessionLocked, lockSession, unlockSession } from '../lib/db';
@@ -12,8 +14,8 @@ import { isThermalAvailable, printCollectionSlipBT } from '../lib/thermal';
 
 const WALK_IN = 'Walk-in';
 
-export default function MilkCollectionScreen({ navigation }: any) {
-  const [code, setCode] = useState('');
+export default function MilkCollectionScreen({ route, navigation }: any) {
+  const [code, setCode] = useState(route.params?.prefillCode ? String(route.params.prefillCode) : '');
   const [memberName, setMemberName] = useState<string | null>(null);
   const [memberMobile, setMemberMobile] = useState<string | null>(null);
   const [deductionPct, setDeductionPct] = useState(0);
@@ -154,7 +156,7 @@ export default function MilkCollectionScreen({ navigation }: any) {
   const canSms = !isWalkIn && !!memberMobile && smsEnabled;
 
   return (
-    <ScrollView style={styles.wrap} contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
+    <KeyboardAwareScreen style={styles.wrap} contentContainerStyle={{ padding: 16 }}>
       <View style={styles.sessionRow}>
         {([[0, 'Morning'], [1, 'Evening']] as const).map(([s, lbl]) => (
           <TouchableOpacity key={s} style={[styles.seg, session === s && styles.segActive]} onPress={() => setSession(s as 0 | 1)}>
@@ -216,11 +218,11 @@ export default function MilkCollectionScreen({ navigation }: any) {
       {/* Action buttons */}
       <View style={styles.actionRow}>
         {canSms ? (
-          <TouchableOpacity style={[styles.btn, styles.btnSms]} onPress={() => save(true)} disabled={saving}>
+          <TouchableOpacity style={[styles.btn, styles.btnSms]} onPress={() => save(true)} onLongPress={() => showHelp('Save & Send', 'सेव और भेजें', 'यह प्रविष्टि सुरक्षित करें और किसान को SMS पर्ची भेजें।', 'Save this entry and send the farmer an SMS slip.')} disabled={saving}>
             {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>📱 Save & Send</Text>}
           </TouchableOpacity>
         ) : null}
-        <TouchableOpacity style={[styles.btn, canSms ? styles.btnSave : styles.btnSaveFull]} onPress={() => save(false)} disabled={saving}>
+        <TouchableOpacity style={[styles.btn, canSms ? styles.btnSave : styles.btnSaveFull]} onPress={() => save(false)} onLongPress={() => showHelp('Save', 'सेव करें', 'किसान के दूध की यह प्रविष्टि सुरक्षित करें।', "Save this farmer's milk entry.")} disabled={saving}>
           {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>{isWalkIn ? '🧾 Save & Print' : '💾 Save'}</Text>}
         </TouchableOpacity>
       </View>
@@ -243,7 +245,7 @@ export default function MilkCollectionScreen({ navigation }: any) {
           ))}
         </>
       )}
-    </ScrollView>
+    </KeyboardAwareScreen>
   );
 }
 

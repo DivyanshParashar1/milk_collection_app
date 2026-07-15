@@ -151,9 +151,11 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
   try { await _db.execAsync(`ALTER TABLE members ADD COLUMN upi_id TEXT`); } catch {}
 
   // Seed "Walk-in" member (code 0) so walk-in collections have a name in reports
+  // Seed "Opening Stock" (code 9999) so added milk can be tracked as collection
   try {
-    await _db.runAsync(
-      `INSERT OR IGNORE INTO members (membercode, name, synced) VALUES (0, 'Walk-in', 1)`
+    await _db.execAsync(
+      `INSERT OR IGNORE INTO members (membercode, name, synced) VALUES (0, 'Walk-in', 1);
+       INSERT OR IGNORE INTO members (membercode, name, synced) VALUES (9999, 'Self/Opening Stock', 1);`
     );
   } catch {}
 
@@ -348,6 +350,23 @@ export async function todayTotals(): Promise<{ litres: number; amount: number; c
      FROM milk_collections WHERE collect_date = date('now')`
   );
   return { litres: row?.litres ?? 0, amount: row?.amount ?? 0, count: row?.count ?? 0 };
+}
+
+/** Current Inventory (All-time sum) */
+export async function inventoryTotals(): Promise<{ collected: number; unionSold: number; localSold: number; remaining: number }> {
+  const db = await getDb();
+  const col: any = await db.getFirstAsync(`SELECT COALESCE(SUM(weight),0) val FROM milk_collections`);
+  const union: any = await db.getFirstAsync(`SELECT COALESCE(SUM(quantity),0) val FROM union_sales`);
+  const local: any = await db.getFirstAsync(`SELECT COALESCE(SUM(quantity),0) val FROM local_sales`);
+  const collected = col?.val ?? 0;
+  const unionSold = union?.val ?? 0;
+  const localSold = local?.val ?? 0;
+  return {
+    collected,
+    unionSold,
+    localSold,
+    remaining: collected - unionSold - localSold,
+  };
 }
 
 // ---------- Reports (date-range aggregates) ----------

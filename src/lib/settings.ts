@@ -12,6 +12,8 @@ export type AppSettings = {
   smsOnSave: boolean;       // open SMS composer after collection save
   btPrinterAddress: string; // paired BT thermal printer MAC address ('' = none)
   btPrinterName: string;    // user-friendly name of the paired printer
+  subscriptionEnd: string;  // from supabase societies
+  isActive: boolean;        // from supabase societies
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -23,6 +25,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   smsOnSave: true,
   btPrinterAddress: '',
   btPrinterName: '',
+  subscriptionEnd: '',
+  isActive: true,
 };
 
 const KEY = 'app_settings_v1';

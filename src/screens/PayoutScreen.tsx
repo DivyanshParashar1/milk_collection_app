@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import KeyboardAwareScreen from '../components/KeyboardAwareScreen';
+import { showHelp } from '../lib/help';
 import { getMemberByCode, farmerBalance, insertPayout } from '../lib/db';
 import { openUpiPayment, isValidVpa, isValidMobile, phoneToVpa } from '../lib/upi';
 import { getSettings } from '../lib/settings';
@@ -84,7 +86,7 @@ export default function PayoutScreen({ route }: any) {
   };
 
   return (
-    <ScrollView style={styles.wrap} contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
+    <KeyboardAwareScreen style={styles.wrap} contentContainerStyle={{ padding: 16 }}>
       <Text style={styles.label}>Farmer code / किसान नंबर</Text>
       <TextInput style={styles.bigInput} keyboardType="number-pad" value={code} onChangeText={setCode} placeholder="000" placeholderTextColor="#bcc" autoFocus />
 
@@ -115,12 +117,12 @@ export default function PayoutScreen({ route }: any) {
           )}
 
           <View style={styles.btnRow}>
-            <TouchableOpacity style={[styles.payBtn, styles.cashBtn]} onPress={payCash} disabled={busy}>
+            <TouchableOpacity style={[styles.payBtn, styles.cashBtn]} onPress={payCash} onLongPress={() => showHelp('Cash', 'नकद', 'किसान को नकद पैसे देकर भुगतान दर्ज करें।', 'Record a cash payment made to the farmer.')} disabled={busy}>
               <Text style={styles.payIcon}>💵</Text>
               <Text style={styles.payText}>CASH</Text>
               <Text style={styles.paySub}>नकद</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.payBtn, styles.upiBtn]} onPress={payUpi} disabled={busy}>
+            <TouchableOpacity style={[styles.payBtn, styles.upiBtn]} onPress={payUpi} onLongPress={() => showHelp('UPI', 'यूपीआई', 'किसान को UPI (फ़ोन) से पैसे भेजें।', 'Pay the farmer by UPI on their phone.')} disabled={busy}>
               {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.payIcon}>📱</Text>}
               <Text style={styles.payText}>UPI</Text>
               <Text style={styles.paySub}>यूपीआई</Text>
@@ -128,7 +130,7 @@ export default function PayoutScreen({ route }: any) {
           </View>
         </>
       )}
-    </ScrollView>
+    </KeyboardAwareScreen>
   );
 }
 

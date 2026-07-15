@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator,
-} from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import KeyboardAwareScreen from "../components/KeyboardAwareScreen";
 import { useFocusEffect } from '@react-navigation/native';
 import { getMemberByCode, insertLedgerEntry, recentLedgerEntries, ledgerBalance } from '../lib/db';
 
@@ -46,7 +45,7 @@ export default function LedgerScreen({ navigation }: any) {
   };
 
   return (
-    <ScrollView style={styles.wrap} contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
+    <KeyboardAwareScreen style={styles.wrap} contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
       <View style={styles.card}>
         <Text style={styles.label}>Member code</Text>
         <TextInput style={styles.bigInput} keyboardType="number-pad" value={code} onChangeText={setCode} placeholder="000" placeholderTextColor="#bcc" autoFocus />
@@ -104,7 +103,7 @@ export default function LedgerScreen({ navigation }: any) {
         </>
       )}
       <View style={{ height: 30 }} />
-    </ScrollView>
+    </KeyboardAwareScreen>
   );
 }
 

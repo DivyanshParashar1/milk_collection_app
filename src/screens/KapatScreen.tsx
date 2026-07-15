@@ -1,7 +1,6 @@
 import React, { useCallback, useState } from 'react';
-import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator,
-} from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import KeyboardAwareScreen from "../components/KeyboardAwareScreen";
 import { useFocusEffect } from '@react-navigation/native';
 import { insertKapatItem, updateKapatItem, deleteKapatItem, listKapatItems, LocalKapatItem } from '../lib/db';
 
@@ -46,7 +45,7 @@ export default function KapatScreen() {
   };
 
   return (
-    <ScrollView style={styles.wrap} contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
+    <KeyboardAwareScreen style={styles.wrap} contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
       <Text style={styles.hint}>
         Define deduction categories (kapat) that apply to farmers. Each can be a fixed ₹ amount or a % of milk value.
       </Text>
@@ -105,7 +104,7 @@ export default function KapatScreen() {
         </>
       )}
       <View style={{ height: 30 }} />
-    </ScrollView>
+    </KeyboardAwareScreen>
   );
 }
 

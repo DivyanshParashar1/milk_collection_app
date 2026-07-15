@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import KeyboardAwareScreen from "../components/KeyboardAwareScreen";
 import { insertMember, updateMember, getMemberByCode } from '../lib/db';
 
 export default function MemberFormScreen({ navigation, route }: any) {
@@ -57,7 +58,7 @@ export default function MemberFormScreen({ navigation, route }: any) {
   };
 
   return (
-    <ScrollView style={styles.wrap} contentContainerStyle={{ padding: 16 }}>
+    <KeyboardAwareScreen style={styles.wrap} contentContainerStyle={{ padding: 16 }}>
       <Field label="Member code *"><TextInput style={[styles.input, isEdit && styles.inputDisabled]} editable={!isEdit} keyboardType="number-pad" value={membercode} onChangeText={setMembercode} placeholder="e.g. 101" placeholderTextColor="#9aa" /></Field>
       <Field label="Name *"><TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Farmer name" placeholderTextColor="#9aa" /></Field>
       <Field label="Mobile"><TextInput style={styles.input} keyboardType="phone-pad" value={mobile1} onChangeText={setMobile1} placeholder="10-digit mobile" placeholderTextColor="#9aa" /></Field>
@@ -79,7 +80,7 @@ export default function MemberFormScreen({ navigation, route }: any) {
       <Field label="Fixed deduction (kapat %)"><TextInput style={styles.input} keyboardType="decimal-pad" value={deduction} onChangeText={setDeduction} placeholder="0" placeholderTextColor="#9aa" /></Field>
 
       <TouchableOpacity style={styles.btn} onPress={save}><Text style={styles.btnText}>Save member</Text></TouchableOpacity>
-    </ScrollView>
+    </KeyboardAwareScreen>
   );
 }
 

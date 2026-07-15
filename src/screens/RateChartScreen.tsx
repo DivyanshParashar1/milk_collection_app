@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import KeyboardAwareScreen from "../components/KeyboardAwareScreen";
 import { getRateChart, setRateChart } from '../lib/db';
 import { linearRateChart } from '../lib/calc';
 
@@ -69,7 +70,7 @@ export default function RateChartScreen({ navigation }: any) {
   const delRow = (i: number) => setRows((rs) => rs.filter((_, idx) => idx !== i));
 
   return (
-    <ScrollView style={styles.wrap} contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
+    <KeyboardAwareScreen style={styles.wrap} contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
       <View style={styles.modeRow}>
         <TouchableOpacity style={[styles.mode, mode === 'simple' && styles.modeOn]} onPress={() => setMode('simple')}>
           <Text style={[styles.modeText, mode === 'simple' && styles.modeTextOn]}>Simple</Text>
@@ -123,7 +124,7 @@ export default function RateChartScreen({ navigation }: any) {
           </TouchableOpacity>
         </>
       )}
-    </ScrollView>
+    </KeyboardAwareScreen>
   );
 }
 

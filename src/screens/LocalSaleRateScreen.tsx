@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import KeyboardAwareScreen from "../components/KeyboardAwareScreen";
 import { getLocalSaleRates, setLocalSaleRate } from '../lib/db';
 
 const TYPES = [
@@ -28,7 +29,7 @@ export default function LocalSaleRateScreen() {
   };
 
   return (
-    <ScrollView style={styles.wrap} contentContainerStyle={{ padding: 16 }}>
+    <KeyboardAwareScreen style={styles.wrap} contentContainerStyle={{ padding: 16 }}>
       <Text style={styles.hint}>Set the default per-litre rate for local (direct) sales. These can be overridden on each sale.</Text>
 
       {TYPES.map((t) => (
@@ -52,7 +53,7 @@ export default function LocalSaleRateScreen() {
       <TouchableOpacity style={styles.btn} onPress={save}>
         <Text style={styles.btnText}>Save rates</Text>
       </TouchableOpacity>
-    </ScrollView>
+    </KeyboardAwareScreen>
   );
 }
 
