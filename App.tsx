@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, ActivityIndicator, StyleSheet, AppState } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -49,6 +49,22 @@ async function seedRateChart() {
 
 function Root() {
   const { session, loading } = useAuth();
+  const appState = useRef(AppState.currentState);
+
+  // P0.3 — silent background sync every time the app comes to foreground
+  useEffect(() => {
+    if (!session) return;
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (appState.current.match(/inactive|background/) && nextState === 'active') {
+        import('./src/lib/sync').then(({ pushAll, pullAll }) => {
+          pushAll().then(() => pullAll()).catch(() => {});
+        });
+      }
+      appState.current = nextState;
+    });
+    return () => sub.remove();
+  }, [session]);
+
   if (loading) {
     return <View style={styles.center}><ActivityIndicator size="large" color={green} /></View>;
   }

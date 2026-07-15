@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import { pullAll, pushAll } from '../lib/sync';
 
 type AuthState = {
   session: Session | null;
@@ -15,13 +16,33 @@ const AuthContext = createContext<AuthState | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  // Track whether we've already done the initial pull for this session
+  const didInitialPull = useRef(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
       setLoading(false);
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
+      const wasSignedOut = !session;
+      setSession(s);
+
+      if (s && wasSignedOut && !didInitialPull.current) {
+        // New login — kick off a background push+pull so the device gets all
+        // existing server data immediately (handles fresh install / reinstall).
+        didInitialPull.current = true;
+        Promise.resolve()
+          .then(() => pushAll())
+          .then(() => pullAll())
+          .catch(() => {}); // silent — user can always tap the sync bar manually
+      }
+
+      if (!s) {
+        // Signed out — reset so next login triggers a fresh pull
+        didInitialPull.current = false;
+      }
+    });
     return () => sub.subscription.unsubscribe();
   }, []);
 

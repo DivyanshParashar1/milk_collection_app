@@ -219,6 +219,66 @@ alter table local_sales add column if not exists milk_type     text default 'mix
 alter table local_sales add column if not exists customer_name text;
 alter table local_sales add column if not exists sale_date     date default current_date;
 
+-- P0.1: client_id for idempotent sync (dedup on retry / multi-device push)
+-- The app generates a stable UUID per row before first insert; push uses upsert
+-- on (society_id, client_id) so retries never produce duplicate rows.
+alter table milk_collections add column if not exists client_id uuid;
+alter table payouts          add column if not exists client_id uuid;
+alter table ledger_entries   add column if not exists client_id uuid;
+alter table local_sales      add column if not exists client_id uuid;
+alter table union_sales      add column if not exists client_id uuid;
+alter table members          add column if not exists client_id uuid;
+
+-- Unique constraints — only add if they don't exist yet (safe to re-run).
+do $$ begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'milk_collections_society_client_id_key'
+  ) then
+    alter table milk_collections add constraint milk_collections_society_client_id_key
+      unique (society_id, client_id);
+  end if;
+end $$;
+do $$ begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'payouts_society_client_id_key'
+  ) then
+    alter table payouts add constraint payouts_society_client_id_key
+      unique (society_id, client_id);
+  end if;
+end $$;
+do $$ begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'ledger_entries_society_client_id_key'
+  ) then
+    alter table ledger_entries add constraint ledger_entries_society_client_id_key
+      unique (society_id, client_id);
+  end if;
+end $$;
+do $$ begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'local_sales_society_client_id_key'
+  ) then
+    alter table local_sales add constraint local_sales_society_client_id_key
+      unique (society_id, client_id);
+  end if;
+end $$;
+do $$ begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'union_sales_society_client_id_key'
+  ) then
+    alter table union_sales add constraint union_sales_society_client_id_key
+      unique (society_id, client_id);
+  end if;
+end $$;
+do $$ begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'members_society_client_id_key'
+  ) then
+    alter table members add constraint members_society_client_id_key
+      unique (society_id, client_id);
+  end if;
+end $$;
+
 -- ---------------------------------------------------------------------------
 -- 3. HELPER FUNCTION
 -- ---------------------------------------------------------------------------
@@ -388,3 +448,33 @@ drop policy if exists "super admin payments" on payments;
 create policy "super admin payments" on payments
   for all using ((select is_super_admin from profiles where id = auth.uid()) = true)
   with check ((select is_super_admin from profiles where id = auth.uid()) = true);
+
+-- ---------------------------------------------------------------------------
+-- 10. P0.4: Backfill — create a society for any profile that has society_id = NULL
+--     (accounts created before the trigger fix in section 6).
+--     Safe to re-run: only touches profiles where society_id IS NULL.
+-- ---------------------------------------------------------------------------
+do $$
+declare
+  r record;
+  v_society_id uuid;
+  v_society_code text;
+  v_name text;
+begin
+  for r in
+    select p.id, p.full_name, u.email
+    from profiles p
+    join auth.users u on u.id = p.id
+    where p.society_id is null
+  loop
+    v_name := coalesce(nullif(trim(r.full_name), ''), split_part(r.email, '@', 1));
+    v_society_code := lower(substring(replace(gen_random_uuid()::text, '-', ''), 1, 8));
+
+    insert into public.societies (code, name, activated, is_active)
+    values (v_society_code, v_name, true, true)
+    returning id into v_society_id;
+
+    update public.profiles set society_id = v_society_id where id = r.id;
+  end loop;
+end;
+$$;

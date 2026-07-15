@@ -13,6 +13,12 @@ import { openCollectionSms, SlipData } from '../lib/sms';
 import { isThermalAvailable, printCollectionSlipBT } from '../lib/thermal';
 
 const WALK_IN = 'Walk-in';
+type AnimalType = 'mix' | 'cow' | 'buff';
+const ANIMAL_TABS: { type: AnimalType; emoji: string; label: string; color: string }[] = [
+  { type: 'mix',  emoji: '🥛', label: 'Mix',     color: '#0d7a86' },
+  { type: 'cow',  emoji: '🐄', label: 'Cow',     color: '#1b9c66' },
+  { type: 'buff', emoji: '🐃', label: 'Buffalo', color: '#2a6fdb' },
+];
 
 export default function MilkCollectionScreen({ route, navigation }: any) {
   const [code, setCode] = useState(route.params?.prefillCode ? String(route.params.prefillCode) : '');
@@ -20,6 +26,7 @@ export default function MilkCollectionScreen({ route, navigation }: any) {
   const [memberMobile, setMemberMobile] = useState<string | null>(null);
   const [deductionPct, setDeductionPct] = useState(0);
   const [session, setSession] = useState<0 | 1>(new Date().getHours() < 14 ? 0 : 1);
+  const [animalType, setAnimalType] = useState<AnimalType>('mix');
   const [weight, setWeight] = useState('');
   const [fat, setFat] = useState('');
   const [snf, setSnf] = useState('');
@@ -30,6 +37,7 @@ export default function MilkCollectionScreen({ route, navigation }: any) {
   const [autoPrint, setAutoPrint] = useState(false);
   const [smsEnabled, setSmsEnabled] = useState(true);
   const [btPrinter, setBtPrinter] = useState('');
+  const [subExpired, setSubExpired] = useState(false);
   const [saving, setSaving] = useState(false);
   const [locked, setLocked] = useState(false);
   const sessionInit = useRef(false);
@@ -47,14 +55,22 @@ export default function MilkCollectionScreen({ route, navigation }: any) {
         setSession(new Date().getHours() < st.amCutoffHour ? 0 : 1);
         sessionInit.current = true;
       }
+      // Check subscription
+      if (st.isActive === false) { setSubExpired(true); return; }
+      if (st.subscriptionEnd) {
+        const daysExpired = (Date.now() - new Date(st.subscriptionEnd).getTime()) / (1000 * 3600 * 24);
+        setSubExpired(daysExpired > 0);
+      }
     });
   }, []);
+
+  // Reload chart when animal type changes
+  useFocusEffect(useCallback(() => { getRateChart(animalType).then((c) => setChart(c as RateEntry[])); }, [animalType]));
 
   const loadRecent = async () => setRecent(await recentCollections(8));
 
   useFocusEffect(
     useCallback(() => {
-      getRateChart().then((c) => setChart(c as RateEntry[]));
       loadRecent();
       const today = new Date().toISOString().slice(0, 10);
       isSessionLocked(today, session).then(setLocked);
@@ -93,6 +109,10 @@ export default function MilkCollectionScreen({ route, navigation }: any) {
     if (!(parseFloat(weight) > 0)) return Alert.alert('Missing', 'Enter weight');
     if (calc.rate === 0) return Alert.alert('No rate', 'No rate found for this fat. Check the rate chart.');
     if (locked) return Alert.alert('Session locked 🔒', 'This session is locked. Unlock it first to add entries.');
+    if (subExpired) return Alert.alert('Subscription Expired 🔒', 'Renew your subscription to add entries.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'View plans', onPress: () => navigation.navigate('Subscription') },
+    ]);
 
     setSaving(true);
     const today = new Date().toISOString().slice(0, 10);
@@ -152,6 +172,7 @@ export default function MilkCollectionScreen({ route, navigation }: any) {
         kg_snf: calc.kgSnf,
         deduction: calc.deduction,
         pay_price: calc.payPrice,
+        animal_type: animalType,
       });
 
       // reset for next farmer, keep session
@@ -168,6 +189,20 @@ export default function MilkCollectionScreen({ route, navigation }: any) {
 
   return (
     <KeyboardAwareScreen style={styles.wrap} contentContainerStyle={{ padding: 16 }}>
+      {/* Animal type selector */}
+      <View style={styles.animalRow}>
+        {ANIMAL_TABS.map((a) => (
+          <TouchableOpacity
+            key={a.type}
+            style={[styles.animalSeg, animalType === a.type && { backgroundColor: a.color, borderColor: a.color }]}
+            onPress={() => setAnimalType(a.type)}
+          >
+            <Text style={styles.animalEmoji}>{a.emoji}</Text>
+            <Text style={[styles.animalLabel, animalType === a.type && { color: '#fff' }]}>{a.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       <View style={styles.sessionRow}>
         {([[0, 'Morning'], [1, 'Evening']] as const).map(([s, lbl]) => (
           <TouchableOpacity key={s} style={[styles.seg, session === s && styles.segActive]} onPress={() => setSession(s as 0 | 1)}>
@@ -273,6 +308,10 @@ function Mini({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
+  animalRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
+  animalSeg: { flex: 1, borderWidth: 2, borderColor: '#ccd', borderRadius: 10, padding: 8, alignItems: 'center', backgroundColor: '#fff' },
+  animalEmoji: { fontSize: 18 },
+  animalLabel: { color: '#4a5a6a', fontWeight: '700', fontSize: 11, marginTop: 2 },
   wrap: { flex: 1, backgroundColor: '#f3f5f7' },
   sessionRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
   seg: { flex: 1, borderWidth: 1, borderColor: '#ccd', borderRadius: 10, padding: 12, alignItems: 'center', backgroundColor: '#fff' },

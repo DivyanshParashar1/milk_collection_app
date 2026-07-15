@@ -74,6 +74,7 @@ export async function pushAll(): Promise<SyncResult> {
       .from('members')
       .upsert(
         {
+          client_id: m.client_id,
           society_id: societyId,
           membercode: m.membercode,
           name: m.name,
@@ -85,7 +86,7 @@ export async function pushAll(): Promise<SyncResult> {
           ifsc_code: m.ifsc_code,
           fix_deduction: m.fix_deduction,
         },
-        { onConflict: 'society_id,membercode' }
+        { onConflict: 'society_id,membercode', ignoreDuplicates: false }
       )
       .select('id')
       .single();
@@ -99,23 +100,27 @@ export async function pushAll(): Promise<SyncResult> {
   for (const c of cols) {
     const { data, error } = await supabase
       .from('milk_collections')
-      .insert({
-        society_id: societyId,
-        membercode: c.membercode,
-        session: c.session,
-        collect_date: c.collect_date,
-        weight: c.weight,
-        fat: c.fat,
-        snf: c.snf,
-        clr: c.clr,
-        rate: c.rate,
-        price: c.price,
-        kg_fat: c.kg_fat,
-        kg_snf: c.kg_snf,
-        deduction: c.deduction,
-        pay_price: c.pay_price,
-        animal_type: c.animal_type,
-      })
+      .upsert(
+        {
+          client_id: c.client_id,
+          society_id: societyId,
+          membercode: c.membercode,
+          session: c.session,
+          collect_date: c.collect_date,
+          weight: c.weight,
+          fat: c.fat,
+          snf: c.snf,
+          clr: c.clr,
+          rate: c.rate,
+          price: c.price,
+          kg_fat: c.kg_fat,
+          kg_snf: c.kg_snf,
+          deduction: c.deduction,
+          pay_price: c.pay_price,
+          animal_type: c.animal_type,
+        },
+        { onConflict: 'society_id,client_id', ignoreDuplicates: false }
+      )
       .select('id')
       .single();
     if (error) return { ...empty, pushedMembers, pushedCollections, pushedPayouts, pushedLedger, pushedLocalSales, pushedUnionSales, error: error.message };
@@ -128,14 +133,18 @@ export async function pushAll(): Promise<SyncResult> {
   for (const p of payouts) {
     const { data, error } = await supabase
       .from('payouts')
-      .insert({
-        society_id: societyId,
-        membercode: p.membercode,
-        amount: p.amount,
-        method: p.method,
-        upi_ref: p.upi_ref,
-        note: p.note,
-      })
+      .upsert(
+        {
+          client_id: p.client_id,
+          society_id: societyId,
+          membercode: p.membercode,
+          amount: p.amount,
+          method: p.method,
+          upi_ref: p.upi_ref,
+          note: p.note,
+        },
+        { onConflict: 'society_id,client_id', ignoreDuplicates: false }
+      )
       .select('id')
       .single();
     if (error) return { ...empty, pushedMembers, pushedCollections, pushedPayouts, pushedLedger, pushedLocalSales, pushedUnionSales, error: error.message };
@@ -148,14 +157,18 @@ export async function pushAll(): Promise<SyncResult> {
   for (const le of ledger) {
     const { data, error } = await supabase
       .from('ledger_entries')
-      .insert({
-        society_id: societyId,
-        membercode: le.membercode,
-        amount: le.amount,
-        kind: le.kind,
-        note: le.note,
-        entry_date: le.entry_date,
-      })
+      .upsert(
+        {
+          client_id: le.client_id,
+          society_id: societyId,
+          membercode: le.membercode,
+          amount: le.amount,
+          kind: le.kind,
+          note: le.note,
+          entry_date: le.entry_date,
+        },
+        { onConflict: 'society_id,client_id', ignoreDuplicates: false }
+      )
       .select('id')
       .single();
     if (error) return { ...empty, pushedMembers, pushedCollections, pushedPayouts, pushedLedger, pushedLocalSales, pushedUnionSales, error: error.message };
@@ -168,15 +181,19 @@ export async function pushAll(): Promise<SyncResult> {
   for (const s of sales) {
     const { data, error } = await supabase
       .from('local_sales')
-      .insert({
-        society_id: societyId,
-        customer_name: s.customer_name,
-        quantity: s.quantity,
-        rate: s.rate,
-        amount: s.amount,
-        milk_type: s.milk_type,
-        sale_date: s.sale_date,
-      })
+      .upsert(
+        {
+          client_id: s.client_id,
+          society_id: societyId,
+          customer_name: s.customer_name,
+          quantity: s.quantity,
+          rate: s.rate,
+          amount: s.amount,
+          milk_type: s.milk_type,
+          sale_date: s.sale_date,
+        },
+        { onConflict: 'society_id,client_id', ignoreDuplicates: false }
+      )
       .select('id')
       .single();
     if (error) return { ...empty, pushedMembers, pushedCollections, pushedPayouts, pushedLedger, pushedLocalSales, pushedUnionSales, error: error.message };
@@ -189,20 +206,24 @@ export async function pushAll(): Promise<SyncResult> {
   for (const u of uSales) {
     const { data, error } = await supabase
       .from('union_sales')
-      .insert({
-        society_id: societyId,
-        sale_date: u.sale_date,
-        session: u.session,
-        quantity: u.quantity,
-        fat: u.fat,
-        snf: u.snf,
-        rate: u.rate,
-        amount: u.amount,
-        kg_fat: u.kg_fat,
-        kg_snf: u.kg_snf,
-        union_name: u.union_name,
-        note: u.note,
-      })
+      .upsert(
+        {
+          client_id: u.client_id,
+          society_id: societyId,
+          sale_date: u.sale_date,
+          session: u.session,
+          quantity: u.quantity,
+          fat: u.fat,
+          snf: u.snf,
+          rate: u.rate,
+          amount: u.amount,
+          kg_fat: u.kg_fat,
+          kg_snf: u.kg_snf,
+          union_name: u.union_name,
+          note: u.note,
+        },
+        { onConflict: 'society_id,client_id', ignoreDuplicates: false }
+      )
       .select('id')
       .single();
     if (error) return { ...empty, pushedMembers, pushedCollections, pushedPayouts, pushedLedger, pushedLocalSales, pushedUnionSales, error: error.message };

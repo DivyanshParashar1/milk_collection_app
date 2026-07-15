@@ -14,9 +14,19 @@ export default function PayoutScreen({ route }: any) {
   const [upiId, setUpiId] = useState('');
   const [upiSource, setUpiSource] = useState<'id' | 'mobile' | 'none'>('none');
   const [upiHandle, setUpiHandle] = useState('upi');
+  const [subExpired, setSubExpired] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => { getSettings().then((st) => setUpiHandle(st.upiHandle)); }, []);
+  useEffect(() => {
+    getSettings().then((st) => {
+      setUpiHandle(st.upiHandle);
+      if (st.isActive === false) { setSubExpired(true); return; }
+      if (st.subscriptionEnd) {
+        const daysExpired = (Date.now() - new Date(st.subscriptionEnd).getTime()) / (1000 * 3600 * 24);
+        setSubExpired(daysExpired > 0);
+      }
+    });
+  }, []);
 
   // resolve farmer as the code is typed
   useEffect(() => {
@@ -56,6 +66,7 @@ export default function PayoutScreen({ route }: any) {
     const amt = parseFloat(amount);
     if (!member) return Alert.alert('Farmer', 'Enter a valid member code');
     if (!(amt > 0)) return Alert.alert('Amount', 'Enter an amount');
+    if (subExpired) return Alert.alert('Subscription Expired', 'Renew your subscription to record payouts.');
     Alert.alert('Pay by cash?', `₹${amt.toFixed(0)} to ${member.name}`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Yes, paid', onPress: () => recordPayout('cash') },
@@ -67,6 +78,7 @@ export default function PayoutScreen({ route }: any) {
     if (!member) return Alert.alert('Farmer', 'Enter a valid member code');
     if (!(amt > 0)) return Alert.alert('Amount', 'Enter an amount');
     if (!isValidVpa(upiId)) return Alert.alert('UPI id needed', 'Enter the farmer\'s UPI id (e.g. 98765xxxxx@ybl)');
+    if (subExpired) return Alert.alert('Subscription Expired', 'Renew your subscription to record payouts.');
 
     setBusy(true);
     const opened = await openUpiPayment({ vpa: upiId, name: member.name, amount: amt, note: `Milk ${member.membercode}` });
@@ -95,6 +107,7 @@ export default function PayoutScreen({ route }: any) {
           <Text style={styles.memberName}>{member.name}</Text>
           <Text style={styles.balanceLabel}>Balance to pay / बकाया</Text>
           <Text style={styles.balanceValue}>₹{balance.toFixed(0)}</Text>
+          <Text style={styles.balanceNote}>kapat deductions already applied</Text>
         </View>
       ) : code ? (
         <Text style={styles.missing}>⚠︎ No farmer with this code</Text>
@@ -142,6 +155,7 @@ const styles = StyleSheet.create({
   memberName: { color: '#fff', fontSize: 24, fontWeight: '800' },
   balanceLabel: { color: '#8fb', marginTop: 10, fontSize: 14 },
   balanceValue: { color: '#43e08e', fontSize: 40, fontWeight: '900', marginTop: 2 },
+  balanceNote: { color: '#5a7a6a', fontSize: 11, marginTop: 6, fontStyle: 'italic' },
   missing: { color: '#c0392b', fontWeight: '700', marginTop: 16, textAlign: 'center', fontSize: 16 },
   input: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#dde', borderRadius: 10, padding: 14, fontSize: 16, color: '#111' },
   upiHint: { color: '#2a6fdb', marginTop: 6, fontSize: 13 },

@@ -7,6 +7,19 @@
 // ============================================================================
 import * as SQLite from 'expo-sqlite';
 
+/** Generate a UUID v4 (works in Expo SDK 57+ which ships crypto.randomUUID). */
+function newUUID(): string {
+  // crypto.randomUUID is available globally via react-native-url-polyfill
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  // Fallback: Math.random-based UUID v4
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
 let _db: SQLite.SQLiteDatabase | null = null;
 
 export async function getDb(): Promise<SQLite.SQLiteDatabase> {
@@ -18,6 +31,7 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
     CREATE TABLE IF NOT EXISTS members (
       local_id     INTEGER PRIMARY KEY AUTOINCREMENT,
       remote_id    TEXT,
+      client_id    TEXT,
       membercode   INTEGER NOT NULL,
       name         TEXT NOT NULL,
       name_local   TEXT,
@@ -35,6 +49,7 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
     CREATE TABLE IF NOT EXISTS payouts (
       local_id   INTEGER PRIMARY KEY AUTOINCREMENT,
       remote_id  TEXT,
+      client_id  TEXT,
       membercode INTEGER NOT NULL,
       amount     REAL NOT NULL,
       method     TEXT NOT NULL,          -- 'cash' | 'upi'
@@ -47,6 +62,7 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
     CREATE TABLE IF NOT EXISTS milk_collections (
       local_id     INTEGER PRIMARY KEY AUTOINCREMENT,
       remote_id    TEXT,
+      client_id    TEXT,
       membercode   INTEGER NOT NULL,
       session      INTEGER DEFAULT 0,
       collect_date TEXT NOT NULL,
@@ -75,6 +91,7 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
     CREATE TABLE IF NOT EXISTS ledger_entries (
       local_id     INTEGER PRIMARY KEY AUTOINCREMENT,
       remote_id    TEXT,
+      client_id    TEXT,
       membercode   INTEGER NOT NULL,
       amount       REAL NOT NULL,
       kind         TEXT NOT NULL,          -- 'jama' (credit) | 'udhar' (debit)
@@ -87,6 +104,7 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
     CREATE TABLE IF NOT EXISTS local_sales (
       local_id       INTEGER PRIMARY KEY AUTOINCREMENT,
       remote_id      TEXT,
+      client_id      TEXT,
       customer_name  TEXT,
       quantity       REAL NOT NULL,
       rate           REAL NOT NULL,
@@ -130,6 +148,7 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
     CREATE TABLE IF NOT EXISTS union_sales (
       local_id     INTEGER PRIMARY KEY AUTOINCREMENT,
       remote_id    TEXT,
+      client_id    TEXT,
       sale_date    TEXT NOT NULL,
       session      INTEGER DEFAULT 0,
       quantity     REAL NOT NULL,
@@ -149,6 +168,13 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
   // lightweight migrations for installs created before a column existed
   // (ALTER throws if the column is already there — safe to ignore)
   try { await _db.execAsync(`ALTER TABLE members ADD COLUMN upi_id TEXT`); } catch {}
+  try { await _db.execAsync(`ALTER TABLE members ADD COLUMN client_id TEXT`); } catch {}
+  try { await _db.execAsync(`ALTER TABLE payouts ADD COLUMN client_id TEXT`); } catch {}
+  try { await _db.execAsync(`ALTER TABLE milk_collections ADD COLUMN client_id TEXT`); } catch {}
+  try { await _db.execAsync(`ALTER TABLE ledger_entries ADD COLUMN client_id TEXT`); } catch {}
+  try { await _db.execAsync(`ALTER TABLE local_sales ADD COLUMN client_id TEXT`); } catch {}
+  try { await _db.execAsync(`ALTER TABLE union_sales ADD COLUMN client_id TEXT`); } catch {}
+  try { await _db.execAsync(`ALTER TABLE rate_chart_entries ADD COLUMN fat_type TEXT DEFAULT 'mix'`); } catch {}
 
   // Seed "Walk-in" member (code 0) so walk-in collections have a name in reports
   // Seed "Opening Stock" (code 9999) so added milk can be tracked as collection
@@ -179,9 +205,10 @@ export async function insertMember(m: LocalMember) {
   const db = await getDb();
   await db.runAsync(
     `INSERT OR REPLACE INTO members
-      (membercode, name, name_local, mobile1, animal_type, upi_id, bank_account, ifsc_code, fix_deduction, synced, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))`,
+      (client_id, membercode, name, name_local, mobile1, animal_type, upi_id, bank_account, ifsc_code, fix_deduction, synced, updated_at)
+     VALUES (COALESCE((SELECT client_id FROM members WHERE membercode=?), ?), ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))`,
     [
+      m.membercode, newUUID(), // COALESCE: keep existing client_id on replace
       m.membercode,
       m.name,
       m.name_local ?? null,
@@ -290,9 +317,10 @@ export async function insertCollection(c: LocalCollection) {
   const db = await getDb();
   await db.runAsync(
     `INSERT INTO milk_collections
-      (membercode, session, collect_date, weight, fat, snf, clr, rate, price, kg_fat, kg_snf, deduction, pay_price, animal_type, synced)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+      (client_id, membercode, session, collect_date, weight, fat, snf, clr, rate, price, kg_fat, kg_snf, deduction, pay_price, animal_type, synced)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
     [
+      newUUID(),
       c.membercode, c.session, c.collect_date, c.weight, c.fat, c.snf, c.clr,
       c.rate, c.price, c.kg_fat, c.kg_snf, c.deduction, c.pay_price,
       c.animal_type ?? 'mix',
@@ -426,20 +454,36 @@ export async function payoutSummary(from: string, to: string): Promise<{ cash: n
 }
 
 // ---------- Rate chart (local cache) ----------
-export async function setRateChart(entries: { fat: number; snf?: number | null; rate: number }[]) {
+// Each animal type (cow/buff/mix) has its own rate chart stored with a type prefix.
+export async function setRateChart(
+  entries: { fat: number; snf?: number | null; rate: number }[],
+  animalType: 'cow' | 'buff' | 'mix' = 'mix'
+) {
   const db = await getDb();
-  await db.runAsync(`DELETE FROM rate_chart_entries`);
+  await db.runAsync(`DELETE FROM rate_chart_entries WHERE fat_type = ? OR fat_type IS NULL`, [animalType]);
   for (const e of entries) {
     await db.runAsync(
-      `INSERT INTO rate_chart_entries (fat, snf, rate) VALUES (?, ?, ?)`,
-      [e.fat, e.snf ?? null, e.rate]
+      `INSERT INTO rate_chart_entries (fat, snf, rate, fat_type) VALUES (?, ?, ?, ?)`,
+      [e.fat, e.snf ?? null, e.rate, animalType]
     );
   }
 }
 
-export async function getRateChart(): Promise<{ fat: number; snf?: number | null; rate: number }[]> {
+export async function getRateChart(
+  animalType: 'cow' | 'buff' | 'mix' = 'mix'
+): Promise<{ fat: number; snf?: number | null; rate: number }[]> {
   const db = await getDb();
-  return db.getAllAsync(`SELECT fat, snf, rate FROM rate_chart_entries ORDER BY fat`);
+  const rows = await db.getAllAsync(
+    `SELECT fat, snf, rate FROM rate_chart_entries WHERE fat_type = ? OR (fat_type IS NULL AND ? = 'mix') ORDER BY fat`,
+    [animalType, animalType]
+  );
+  // If no specific chart exists for cow/buff, fall back to mix
+  if (rows.length === 0 && animalType !== 'mix') {
+    return db.getAllAsync(
+      `SELECT fat, snf, rate FROM rate_chart_entries WHERE fat_type = 'mix' OR fat_type IS NULL ORDER BY fat`
+    ) as Promise<any[]>;
+  }
+  return rows as any[];
 }
 
 // ---------- Payouts (cash / UPI to farmer) ----------
@@ -454,9 +498,9 @@ export type LocalPayout = {
 export async function insertPayout(p: LocalPayout) {
   const db = await getDb();
   await db.runAsync(
-    `INSERT INTO payouts (membercode, amount, method, upi_ref, note, synced)
-     VALUES (?, ?, ?, ?, ?, 0)`,
-    [p.membercode, p.amount, p.method, p.upi_ref ?? null, p.note ?? null]
+    `INSERT INTO payouts (client_id, membercode, amount, method, upi_ref, note, synced)
+     VALUES (?, ?, ?, ?, ?, ?, 0)`,
+    [newUUID(), p.membercode, p.amount, p.method, p.upi_ref ?? null, p.note ?? null]
   );
 }
 
@@ -530,9 +574,9 @@ export type LocalLedgerEntry = {
 export async function insertLedgerEntry(e: LocalLedgerEntry) {
   const db = await getDb();
   await db.runAsync(
-    `INSERT INTO ledger_entries (membercode, amount, kind, note, entry_date, synced)
-     VALUES (?, ?, ?, ?, ?, 0)`,
-    [e.membercode, e.amount, e.kind, e.note ?? null, e.entry_date ?? new Date().toISOString().slice(0, 10)]
+    `INSERT INTO ledger_entries (client_id, membercode, amount, kind, note, entry_date, synced)
+     VALUES (?, ?, ?, ?, ?, ?, 0)`,
+    [newUUID(), e.membercode, e.amount, e.kind, e.note ?? null, e.entry_date ?? new Date().toISOString().slice(0, 10)]
   );
 }
 
@@ -624,9 +668,9 @@ export type LocalSale = {
 export async function insertLocalSale(s: LocalSale) {
   const db = await getDb();
   await db.runAsync(
-    `INSERT INTO local_sales (customer_name, quantity, rate, amount, milk_type, sale_date, synced)
-     VALUES (?, ?, ?, ?, ?, ?, 0)`,
-    [s.customer_name ?? null, s.quantity, s.rate, s.amount, s.milk_type ?? 'mix', s.sale_date ?? new Date().toISOString().slice(0, 10)]
+    `INSERT INTO local_sales (client_id, customer_name, quantity, rate, amount, milk_type, sale_date, synced)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
+    [newUUID(), s.customer_name ?? null, s.quantity, s.rate, s.amount, s.milk_type ?? 'mix', s.sale_date ?? new Date().toISOString().slice(0, 10)]
   );
 }
 
@@ -795,9 +839,9 @@ export type LocalUnionSale = {
 export async function insertUnionSale(s: LocalUnionSale) {
   const db = await getDb();
   await db.runAsync(
-    `INSERT INTO union_sales (sale_date, session, quantity, fat, snf, rate, amount, kg_fat, kg_snf, union_name, note, synced)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
-    [s.sale_date, s.session, s.quantity, s.fat, s.snf, s.rate, s.amount, s.kg_fat, s.kg_snf, s.union_name ?? null, s.note ?? null]
+    `INSERT INTO union_sales (client_id, sale_date, session, quantity, fat, snf, rate, amount, kg_fat, kg_snf, union_name, note, synced)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+    [newUUID(), s.sale_date, s.session, s.quantity, s.fat, s.snf, s.rate, s.amount, s.kg_fat, s.kg_snf, s.union_name ?? null, s.note ?? null]
   );
 }
 
