@@ -10,8 +10,21 @@
 // ============================================================================
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-// Stable legacy file API (supported via this subpath on SDK 57).
-import { cacheDirectory, copyAsync } from 'expo-file-system/legacy';
+
+// Render `html` to a PDF and open the OS share sheet. Shares the file that
+// expo-print writes into the app's own cache dir directly — expo-sharing serves
+// it through the app's FileProvider, so no manual copy step is needed.
+async function renderAndShare(html: string, dialogTitle: string): Promise<{ error?: string }> {
+  try {
+    const { uri } = await Print.printToFileAsync({ html });
+    if (await Sharing.isAvailableAsync()) {
+      await Sharing.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle });
+    }
+    return {};
+  } catch (e: any) {
+    return { error: String(e?.message ?? e) };
+  }
+}
 
 const esc = (s: any) =>
   String(s ?? '').replace(/[&<>]/g, (c) => (c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;'));
@@ -127,35 +140,7 @@ export async function printCollectionSlip(d: SlipData): Promise<{ error?: string
 }
 
 export async function exportReportPdf(d: ReportData): Promise<{ error?: string }> {
-  try {
-    if (!(await Sharing.isAvailableAsync())) {
-      return { error: 'Sharing is not available on this device.' };
-    }
-    const { uri } = await Print.printToFileAsync({ html: reportHtml(d) });
-
-    // printToFileAsync writes to a temp path the share sheet may not be allowed
-    // to read. Copy it into the app's own cache dir (which IS shareable) with a
-    // clean .pdf name, then share that.
-    let shareUri = uri;
-    if (cacheDirectory) {
-      try {
-        const dest = `${cacheDirectory}report-${Date.now()}.pdf`;
-        await copyAsync({ from: uri, to: dest });
-        shareUri = dest;
-      } catch {
-        shareUri = uri; // fall back to the original if the copy fails
-      }
-    }
-
-    await Sharing.shareAsync(shareUri, {
-      mimeType: 'application/pdf',
-      UTI: 'com.adobe.pdf',
-      dialogTitle: 'Share report',
-    });
-    return {};
-  } catch (e: any) {
-    return { error: String(e?.message ?? e) };
-  }
+  return renderAndShare(reportHtml(d), 'Share report');
 }
 
 // ---------- Datewise report PDF export ----------
@@ -219,32 +204,7 @@ export function datewiseReportHtml(d: DatewiseReportData): string {
 }
 
 export async function exportDatewiseReportPdf(d: DatewiseReportData): Promise<{ error?: string }> {
-  try {
-    if (!(await Sharing.isAvailableAsync())) {
-      return { error: 'Sharing is not available on this device.' };
-    }
-    const { uri } = await Print.printToFileAsync({ html: datewiseReportHtml(d) });
-
-    let shareUri = uri;
-    if (cacheDirectory) {
-      try {
-        const dest = `${cacheDirectory}datewise-${Date.now()}.pdf`;
-        await copyAsync({ from: uri, to: dest });
-        shareUri = dest;
-      } catch {
-        shareUri = uri;
-      }
-    }
-
-    await Sharing.shareAsync(shareUri, {
-      mimeType: 'application/pdf',
-      UTI: 'com.adobe.pdf',
-      dialogTitle: 'Share datewise report',
-    });
-    return {};
-  } catch (e: any) {
-    return { error: String(e?.message ?? e) };
-  }
+  return renderAndShare(datewiseReportHtml(d), 'Share datewise report');
 }
 
 // ---------- Payment Report (Farmer Period Bill) PDF ----------
@@ -333,30 +293,5 @@ function paymentReportHtml(d: PaymentReportInput): string {
 }
 
 export async function exportPaymentReportPdf(d: PaymentReportInput): Promise<{ error?: string }> {
-  try {
-    if (!(await Sharing.isAvailableAsync())) {
-      return { error: 'Sharing is not available on this device.' };
-    }
-    const { uri } = await Print.printToFileAsync({ html: paymentReportHtml(d) });
-
-    let shareUri = uri;
-    if (cacheDirectory) {
-      try {
-        const dest = `${cacheDirectory}payment-${d.membercode}-${Date.now()}.pdf`;
-        await copyAsync({ from: uri, to: dest });
-        shareUri = dest;
-      } catch {
-        shareUri = uri;
-      }
-    }
-
-    await Sharing.shareAsync(shareUri, {
-      mimeType: 'application/pdf',
-      UTI: 'com.adobe.pdf',
-      dialogTitle: 'Share payment report',
-    });
-    return {};
-  } catch (e: any) {
-    return { error: String(e?.message ?? e) };
-  }
+  return renderAndShare(paymentReportHtml(d), 'Share payment report');
 }

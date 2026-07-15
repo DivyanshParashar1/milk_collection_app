@@ -96,7 +96,7 @@ export default function SettingsScreen() {
       <View style={styles.divider} />
       <Text style={styles.section}>Bluetooth Thermal Printer</Text>
       {!isThermalAvailable() ? (
-        <Text style={styles.hint}>⚠️ Thermal printer module not available. Needs a dev-client build with react-native-thermal-printer-driver.</Text>
+        <Text style={styles.hint}>⚠️ Thermal printer module not available. Needs a dev-client / EAS build (not Expo Go) with react-native-thermal-printer installed.</Text>
       ) : (
         <>
           <Text style={styles.hint}>Pair a BT thermal printer for auto-printing receipts on save.</Text>

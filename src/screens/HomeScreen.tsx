@@ -1,6 +1,8 @@
-import React, { useCallback, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator, RefreshControl } from 'react-native';
+import React, { useCallback, useLayoutEffect, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator, RefreshControl, Modal, Linking } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+
+const SUPPORT_PHONE = '7737115459';
 import { useAuth } from '../context/AuthContext';
 import { getSettings } from '../lib/settings';
 import { todayTotals, pendingCount } from '../lib/db';
@@ -31,6 +33,18 @@ export default function HomeScreen({ navigation }: any) {
   const [pending, setPending] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // Three-dot menu button next to the app name in the top bar.
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity onPress={() => setMenuOpen(true)} hitSlop={12} style={{ paddingHorizontal: 4 }}>
+          <Text style={{ color: '#fff', fontSize: 24, fontWeight: '900' }}>⋮</Text>
+        </TouchableOpacity>
+      ),
+    });
+  }, [navigation]);
 
   const load = useCallback(async () => {
     setTotals(await todayTotals());
@@ -90,15 +104,10 @@ export default function HomeScreen({ navigation }: any) {
   }
 
   return (
+    <>
     <ScrollView style={styles.wrap} contentContainerStyle={{ padding: 16 }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
-      <View style={styles.headerRow}>
-        <Text style={styles.title}>Today · आज</Text>
-        <View style={styles.headerActions}>
-          <TouchableOpacity onPress={() => navigation.navigate('Settings')} hitSlop={10}><Text style={styles.gear}>⚙️</Text></TouchableOpacity>
-          <TouchableOpacity onPress={() => signOut()} hitSlop={10}><Text style={styles.signout}>Exit</Text></TouchableOpacity>
-        </View>
-      </View>
+      <Text style={[styles.title, { marginBottom: 16 }]}>Today · आज</Text>
 
       {subStatus === 'locked_entry' && (
         <View style={{ backgroundColor: '#fcebe9', padding: 12, borderRadius: 10, marginBottom: 16 }}>
@@ -147,6 +156,27 @@ export default function HomeScreen({ navigation }: any) {
 
       <Text style={styles.hint}>दबाकर रखें = मदद · Press & hold any button for help</Text>
     </ScrollView>
+
+    <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
+      <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setMenuOpen(false)}>
+        <View style={styles.menuCard}>
+          <MenuItem icon="⚙️" label="Settings · सेटिंग" onPress={() => { setMenuOpen(false); navigation.navigate('Settings'); }} />
+          <MenuItem icon="📞" label="Contact us · संपर्क" onPress={() => { setMenuOpen(false); Linking.openURL(`tel:${SUPPORT_PHONE}`); }} />
+          <View style={styles.menuDivider} />
+          <MenuItem icon="🚪" label="Sign out · लॉग आउट" onPress={() => { setMenuOpen(false); signOut(); }} />
+        </View>
+      </TouchableOpacity>
+    </Modal>
+    </>
+  );
+}
+
+function MenuItem({ icon, label, onPress }: { icon: string; label: string; onPress: () => void }) {
+  return (
+    <TouchableOpacity style={styles.menuItem} onPress={onPress}>
+      <Text style={styles.menuIcon}>{icon}</Text>
+      <Text style={styles.menuLabel}>{label}</Text>
+    </TouchableOpacity>
   );
 }
 
@@ -180,4 +210,10 @@ const styles = StyleSheet.create({
   tileEn: { color: '#fff', fontWeight: '800', fontSize: 15, textAlign: 'center' },
   tileHi: { color: '#fff', opacity: 0.8, fontSize: 12, marginTop: 4 },
   hint: { textAlign: 'center', color: '#8a97a5', fontSize: 12, marginTop: 20 },
+  menuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.12)' },
+  menuCard: { position: 'absolute', top: 96, right: 10, backgroundColor: '#fff', borderRadius: 12, paddingVertical: 6, minWidth: 220, elevation: 8, shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 14, shadowOffset: { width: 0, height: 4 } },
+  menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 18 },
+  menuIcon: { fontSize: 20, marginRight: 14 },
+  menuLabel: { fontSize: 16, fontWeight: '700', color: '#0d1b2a' },
+  menuDivider: { height: 1, backgroundColor: '#eef1f4', marginVertical: 2 },
 });

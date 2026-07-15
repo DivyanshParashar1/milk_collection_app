@@ -307,7 +307,8 @@ create policy "society rw" on rate_chart_entries
   );
 
 -- ---------------------------------------------------------------------------
--- 6. NEW-USER TRIGGER — auto-create a profile row on signup
+-- 6. NEW-USER TRIGGER — auto-create a profile + fresh society on signup
+--    Every new account gets its own isolated society/dairy.
 -- ---------------------------------------------------------------------------
 create or replace function handle_new_user()
 returns trigger
@@ -315,10 +316,31 @@ language plpgsql
 security definer
 set search_path = ''
 as $$
+declare
+  v_society_id uuid;
+  v_society_name text;
+  v_society_code text;
 begin
-  insert into public.profiles (id, full_name)
-  values (new.id, new.raw_user_meta_data->>'full_name')
-  on conflict (id) do nothing;
+  -- Derive society name from signup metadata; fall back to full_name or email prefix
+  v_society_name := coalesce(
+    nullif(trim(new.raw_user_meta_data->>'society_name'), ''),
+    nullif(trim(new.raw_user_meta_data->>'full_name'), ''),
+    split_part(new.email, '@', 1)
+  );
+
+  -- Generate a unique society code (8-char random hex)
+  v_society_code := lower(substring(replace(gen_random_uuid()::text, '-', ''), 1, 8));
+
+  -- Create a brand-new society for this account
+  insert into public.societies (code, name, activated, is_active)
+  values (v_society_code, v_society_name, true, true)
+  returning id into v_society_id;
+
+  -- Create the profile linked to the new society
+  insert into public.profiles (id, full_name, society_id)
+  values (new.id, new.raw_user_meta_data->>'full_name', v_society_id)
+  on conflict (id) do update set society_id = v_society_id;
+
   return new;
 end; $$;
 
@@ -333,3 +355,36 @@ create trigger on_auth_user_created
 -- ---------------------------------------------------------------------------
 update profiles set is_super_admin = true
 where id in (select id from auth.users where email = '8824753192@milkapp.local');
+
+-- ---------------------------------------------------------------------------
+-- 8. APP CONFIG — single global row holding the payee UPI ID for subscription
+--    payments. Editable by super admins from the app; readable by all users.
+-- ---------------------------------------------------------------------------
+create table if not exists app_config (
+  id             int primary key default 1,
+  upi_vpa        text default '7737115459@upi',
+  upi_payee_name text default 'MilkApp',
+  updated_at     timestamptz default now(),
+  constraint app_config_singleton check (id = 1)
+);
+insert into app_config (id) values (1) on conflict (id) do nothing;
+
+alter table app_config enable row level security;
+-- any signed-in user can read the payee UPI ID (the subscription screen needs it)
+drop policy if exists "read app_config" on app_config;
+create policy "read app_config" on app_config
+  for select using (auth.uid() is not null);
+-- only super admins can change it
+drop policy if exists "super admin app_config" on app_config;
+create policy "super admin app_config" on app_config
+  for all using ((select is_super_admin from profiles where id = auth.uid()) = true)
+  with check ((select is_super_admin from profiles where id = auth.uid()) = true);
+
+-- ---------------------------------------------------------------------------
+-- 9. Super admins can read/manage every dairy's payment requests
+--    (the normal "society rw" policy only exposes a user's own society).
+-- ---------------------------------------------------------------------------
+drop policy if exists "super admin payments" on payments;
+create policy "super admin payments" on payments
+  for all using ((select is_super_admin from profiles where id = auth.uid()) = true)
+  with check ((select is_super_admin from profiles where id = auth.uid()) = true);

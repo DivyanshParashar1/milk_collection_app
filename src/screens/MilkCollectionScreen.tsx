@@ -100,6 +100,44 @@ export default function MilkCollectionScreen({ route, navigation }: any) {
     const name = isWalkIn ? WALK_IN : (memberName ?? String(c));
 
     try {
+      // Pipeline order: 1) SMS  →  2) Print  →  3) Save to DB.
+      // SMS and print failures are non-fatal so the entry is still recorded.
+
+      // 1) SMS first (registered farmers with a mobile number)
+      if (sendSms && !isWalkIn && memberMobile) {
+        try {
+          const smsData: SlipData = {
+            societyName, date: today, session: sessionLabel,
+            memberName: name, membercode: c,
+            weight: calc.weight, fat: calc.fat, snf: calc.snf || undefined, rate: calc.rate, amount: calc.price,
+          };
+          await openCollectionSms(memberMobile, smsData);
+        } catch (e: any) {
+          Alert.alert('SMS error', e?.message ?? String(e));
+        }
+      }
+
+      // 2) Print next — Bluetooth thermal if configured, else OS print dialog
+      try {
+        if (btPrinter && isThermalAvailable()) {
+          const r = await printCollectionSlipBT(btPrinter, {
+            societyName, date: today, session: sessionLabel,
+            memberName: name, membercode: c,
+            weight: calc.weight, fat: calc.fat, snf: calc.snf || undefined, rate: calc.rate, amount: calc.price,
+          });
+          if (r.error) Alert.alert('Print error', r.error);
+        } else if (autoPrint) {
+          await printCollectionSlip({
+            society: societyName, date: today, session: sessionLabel,
+            code: c, name,
+            weight: calc.weight, fat: calc.fat, snf: calc.snf, rate: calc.rate, amount: calc.price,
+          });
+        }
+      } catch (e: any) {
+        Alert.alert('Print error', e?.message ?? String(e));
+      }
+
+      // 3) Save to the local DB last
       await insertCollection({
         membercode: c,
         session,
@@ -115,33 +153,6 @@ export default function MilkCollectionScreen({ route, navigation }: any) {
         deduction: calc.deduction,
         pay_price: calc.payPrice,
       });
-
-      // Thermal BT print (if configured)
-      if (btPrinter && isThermalAvailable()) {
-        const r = await printCollectionSlipBT(btPrinter, {
-          societyName, date: today, session: sessionLabel,
-          memberName: name, membercode: c,
-          weight: calc.weight, fat: calc.fat, snf: calc.snf || undefined, rate: calc.rate, amount: calc.price,
-        });
-        if (r.error) Alert.alert('Print error', r.error);
-      } else if (autoPrint) {
-        // OS print dialog fallback
-        await printCollectionSlip({
-          society: societyName, date: today, session: sessionLabel,
-          code: c, name,
-          weight: calc.weight, fat: calc.fat, snf: calc.snf, rate: calc.rate, amount: calc.price,
-        });
-      }
-
-      // SMS (only for registered farmers with mobile)
-      if (sendSms && !isWalkIn && memberMobile) {
-        const smsData: SlipData = {
-          societyName, date: today, session: sessionLabel,
-          memberName: name, membercode: c,
-          weight: calc.weight, fat: calc.fat, snf: calc.snf || undefined, rate: calc.rate, amount: calc.price,
-        };
-        await openCollectionSms(memberMobile, smsData);
-      }
 
       // reset for next farmer, keep session
       setCode(''); setWeight(''); setFat(''); setSnf(''); setMemberName(null); setMemberMobile(null);

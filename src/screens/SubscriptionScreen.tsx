@@ -1,9 +1,6 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, ScrollView, Platform } from 'react-native';
-import { supabase } from '../lib/supabase';
-// Native module — present only in a dev-client / release build, not Expo Go.
-let RazorpayCheckout: any = null;
-try { RazorpayCheckout = require('react-native-razorpay').default; } catch { /* not linked in Expo Go */ }
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, ScrollView, Linking, AppState } from 'react-native';
+import { getPayConfig, buildUpiUrl, raiseSubscriptionRequest, PayConfig, DEFAULT_VPA, DEFAULT_PAYEE } from '../lib/upiPay';
 
 const PLANS = [
   { id: 'monthly', label: 'Monthly', sub: '1 month', price: 199 },
@@ -13,62 +10,72 @@ const PLANS = [
 export default function SubscriptionScreen() {
   const [plan, setPlan] = useState(PLANS[0]);
   const [busy, setBusy] = useState(false);
+  const [cfg, setCfg] = useState<PayConfig>({ vpa: DEFAULT_VPA, payeeName: DEFAULT_PAYEE });
+  const [requested, setRequested] = useState(false);
+  const openedRef = useRef(false);
 
-  const subscribe = async () => {
-    setBusy(true);
+  useEffect(() => { getPayConfig().then(setCfg); }, []);
+
+  // UPI apps return to us when done. On resume (if we launched one), ask to confirm.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (s) => {
+      if (s === 'active' && openedRef.current) {
+        openedRef.current = false;
+        confirmPaid();
+      }
+    });
+    return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plan, cfg]);
+
+  const payViaUpi = async () => {
+    const url = buildUpiUrl(cfg, plan.price, `MilkApp ${plan.label} subscription`);
+    openedRef.current = true;
     try {
-      // 1) create the Razorpay order server-side (secret stays in the Edge Function)
-      const { data, error } = await supabase.functions.invoke('razorpay-order', {
-        body: { amount: plan.price, receipt: `sub_${plan.id}_${Date.now()}`, notes: { purpose: 'subscription', plan: plan.id } },
-      });
-      if (error) throw new Error(error.message);
-      if (data?.error) throw new Error(data.error);
-
-      // record the pending subscription
-      const { data: userData } = await supabase.auth.getUser();
-      const { data: prof } = await supabase.from('profiles').select('society_id').eq('id', userData.user!.id).single();
-      const societyId = prof?.society_id;
-      if (societyId) {
-        await supabase.from('payments').insert({
-          society_id: societyId,
-          amount: plan.price,
-          purpose: 'subscription',
-          plan: plan.id,
-          razorpay_order_id: data.orderId,
-          status: 'created',
-        });
-      }
-
-      if (!RazorpayCheckout) {
-        Alert.alert('Order created ✓', `Subscription order for ₹${plan.price} created.\n\nThe checkout popup needs a dev-client build (not Expo Go): npx expo run:android`);
-        return;
-      }
-
-      // 2) open checkout
-      const result = await RazorpayCheckout.open({
-        key: data.keyId,
-        order_id: data.orderId,
-        amount: data.amount,
-        currency: data.currency,
-        name: 'MilkApp',
-        description: `${plan.label} subscription`,
-        theme: { color: '#8a3ffc' },
-      });
-
-      // 3) mark paid
-      await supabase.from('payments').update({ status: 'paid', razorpay_payment_id: result.razorpay_payment_id }).eq('razorpay_order_id', data.orderId);
-      Alert.alert('Subscribed ✓', `Payment ID: ${result.razorpay_payment_id}`);
-    } catch (e: any) {
-      Alert.alert('Payment cancelled / failed', e?.description || e?.message || String(e));
-    } finally {
-      setBusy(false);
+      await Linking.openURL(url);
+    } catch {
+      openedRef.current = false;
+      Alert.alert(
+        'No UPI app found',
+        `Please pay ₹${plan.price} to this UPI ID:\n\n${cfg.vpa}\n\nThen tap "I have already paid".`
+      );
     }
+  };
+
+  const confirmPaid = () => {
+    Alert.alert(
+      'Payment complete?',
+      `Did you finish paying ₹${plan.price} to ${cfg.vpa}?`,
+      [
+        { text: 'Not yet', style: 'cancel' },
+        { text: 'Yes, I paid', onPress: sendRequest },
+      ]
+    );
+  };
+
+  const sendRequest = async () => {
+    setBusy(true);
+    const r = await raiseSubscriptionRequest(plan, `UPI ₹${plan.price} → ${cfg.vpa}`);
+    setBusy(false);
+    if (r.error) return Alert.alert('Could not send request', r.error);
+    setRequested(true);
+    Alert.alert(
+      'Request sent ✓',
+      'We have notified the admin. Your subscription will be activated shortly once they confirm your payment.'
+    );
   };
 
   return (
     <ScrollView style={styles.wrap} contentContainerStyle={{ padding: 16 }}>
       <Text style={styles.title}>App Subscription</Text>
-      <Text style={styles.subtitle}>Unlock the app for your dairy. Pay securely with Razorpay (UPI / card / netbanking).</Text>
+      <Text style={styles.subtitle}>Unlock the app for your dairy. Pay by UPI, then the admin activates your account.</Text>
+
+      {requested && (
+        <View style={styles.pending}>
+          <Text style={styles.pendingTitle}>⏳ Activation pending</Text>
+          <Text style={styles.pendingText}>Your payment request was sent to the admin. You'll be unlocked once they confirm it.</Text>
+        </View>
+      )}
 
       {PLANS.map((p) => (
         <TouchableOpacity key={p.id} style={[styles.planCard, plan.id === p.id && styles.planActive]} onPress={() => setPlan(p)}>
@@ -81,15 +88,22 @@ export default function SubscriptionScreen() {
         </TouchableOpacity>
       ))}
 
-      <TouchableOpacity style={styles.btn} onPress={subscribe} disabled={busy}>
-        {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Subscribe · ₹{plan.price}</Text>}
+      <TouchableOpacity style={styles.btn} onPress={payViaUpi} disabled={busy}>
+        <Text style={styles.btnText}>Pay ₹{plan.price} via UPI</Text>
       </TouchableOpacity>
 
-      {!RazorpayCheckout && (
-        <Text style={styles.hint}>
-          Running in Expo Go: order creation works, but the Razorpay checkout popup needs a dev-client build ({Platform.OS === 'ios' ? 'npx expo run:ios' : 'npx expo run:android'}).
-        </Text>
-      )}
+      <TouchableOpacity style={styles.paidBtn} onPress={confirmPaid} disabled={busy}>
+        {busy ? <ActivityIndicator color="#1b9c66" /> : <Text style={styles.paidText}>✅  I have already paid</Text>}
+      </TouchableOpacity>
+
+      <View style={styles.payToBox}>
+        <Text style={styles.payToLabel}>Pay to UPI ID</Text>
+        <Text selectable style={styles.payToVpa}>{cfg.vpa}</Text>
+      </View>
+
+      <Text style={styles.hint}>
+        How it works: tap “Pay via UPI”, complete the payment in your UPI app, then confirm here. The admin verifies it and unlocks your dairy.
+      </Text>
     </ScrollView>
   );
 }
@@ -98,14 +112,22 @@ const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: '#f3f5f7' },
   title: { fontSize: 24, fontWeight: '800', color: '#0d1b2a' },
   subtitle: { color: '#67788a', marginTop: 6, marginBottom: 18, fontSize: 14 },
+  pending: { backgroundColor: '#fff6d9', borderRadius: 12, padding: 14, marginBottom: 16 },
+  pendingTitle: { fontWeight: '800', color: '#8a6d1b', fontSize: 15 },
+  pendingText: { color: '#8a6d1b', fontSize: 13, marginTop: 4 },
   planCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, padding: 18, marginBottom: 12, borderWidth: 2, borderColor: '#fff' },
-  planActive: { borderColor: '#8a3ffc' },
+  planActive: { borderColor: '#1b9c66' },
   planLabel: { fontSize: 18, fontWeight: '800', color: '#0d1b2a' },
   planSub: { color: '#67788a', marginTop: 2, fontSize: 13 },
-  planPrice: { fontSize: 22, fontWeight: '800', color: '#8a3ffc', marginRight: 12 },
+  planPrice: { fontSize: 22, fontWeight: '800', color: '#1b9c66', marginRight: 12 },
   radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: '#ccd' },
-  radioOn: { borderColor: '#8a3ffc', backgroundColor: '#8a3ffc' },
-  btn: { backgroundColor: '#8a3ffc', padding: 18, borderRadius: 14, alignItems: 'center', marginTop: 8 },
+  radioOn: { borderColor: '#1b9c66', backgroundColor: '#1b9c66' },
+  btn: { backgroundColor: '#1b9c66', padding: 18, borderRadius: 14, alignItems: 'center', marginTop: 8 },
   btnText: { color: '#fff', fontWeight: '800', fontSize: 18 },
-  hint: { color: '#8a6d1b', backgroundColor: '#fff6d9', padding: 12, borderRadius: 10, marginTop: 16, fontSize: 13 },
+  paidBtn: { backgroundColor: '#fff', borderWidth: 2, borderColor: '#1b9c66', padding: 16, borderRadius: 14, alignItems: 'center', marginTop: 12 },
+  paidText: { color: '#1b9c66', fontWeight: '800', fontSize: 16 },
+  payToBox: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginTop: 16, alignItems: 'center' },
+  payToLabel: { color: '#67788a', fontSize: 12 },
+  payToVpa: { color: '#0d1b2a', fontSize: 18, fontWeight: '800', marginTop: 4 },
+  hint: { color: '#67788a', padding: 12, fontSize: 13, marginTop: 8, lineHeight: 18 },
 });
