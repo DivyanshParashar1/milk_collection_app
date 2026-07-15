@@ -423,7 +423,7 @@ where id in (select id from auth.users where email = '8824753192@milkapp.local')
 create table if not exists app_config (
   id             int primary key default 1,
   upi_vpa        text default '7737115459@upi',
-  upi_payee_name text default 'MilkApp',
+  upi_payee_name text default 'Neerja Milk Collection',
   updated_at     timestamptz default now(),
   constraint app_config_singleton check (id = 1)
 );

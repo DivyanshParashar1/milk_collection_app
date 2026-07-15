@@ -1,0 +1,22 @@
+diff --git a/node_modules/react-native-thermal-printer/android/build.gradle b/node_modules/react-native-thermal-printer/android/build.gradle
+index 70b06e0..a1b21aa 100644
+--- a/node_modules/react-native-thermal-printer/android/build.gradle
++++ b/node_modules/react-native-thermal-printer/android/build.gradle
+@@ -2,7 +2,7 @@ buildscript {
+     if (project == rootProject) {
+         repositories {
+             google()
+-            jcenter()
++            mavenCentral()
+         }
+ 
+         dependencies {
+@@ -49,7 +49,7 @@ repositories {
+         url("$rootDir/../node_modules/react-native/android")
+     }
+     google()
+-    jcenter()
++    mavenCentral()
+     maven { url 'https://www.jitpack.io' }
+ }
+ 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, KeyboardAvoidingView, Platform,
+  View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, Image
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 
@@ -51,7 +51,10 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView style={styles.wrap} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <Text style={styles.logo}>🥛 MilkApp</Text>
+      <View style={{ alignItems: 'center', marginBottom: 12 }}>
+        <Image source={require('../../assets/icon.png')} style={{ width: 100, height: 100, resizeMode: 'contain' }} />
+      </View>
+      <Text style={styles.logo}>Neerja Milk Collection</Text>
       <Text style={styles.subtitle}>Dairy Collection</Text>
 
       <View style={styles.card}>
@@ -86,7 +89,7 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: '#0d1b2a', justifyContent: 'center', padding: 24 },
-  logo: { fontSize: 40, textAlign: 'center', color: '#fff', fontWeight: '800' },
+  logo: { fontSize: 26, textAlign: 'center', color: '#fff', fontWeight: '800' },
   subtitle: { textAlign: 'center', color: '#8fb', marginBottom: 28, letterSpacing: 2 },
   card: { backgroundColor: '#fff', borderRadius: 16, padding: 22 },
   h: { fontSize: 20, fontWeight: '700', marginBottom: 16, color: '#0d1b2a' },

@@ -34,7 +34,7 @@ export default function SuperAdminScreen() {
   }, []);
 
   const saveVpa = async () => {
-    const r = await setPayConfig(vpa, 'MilkApp');
+    const r = await setPayConfig(vpa, 'Neerja Milk Collection');
     if (r.error) Alert.alert('Error', r.error);
     else Alert.alert('Saved ✓', `Payments will now go to ${vpa}`);
   };

@@ -8,7 +8,7 @@
 import { supabase } from './supabase';
 
 export const DEFAULT_VPA = '7737115459@upi';
-export const DEFAULT_PAYEE = 'MilkApp';
+export const DEFAULT_PAYEE = 'Neerja Milk Collection';
 
 export type PayConfig = { vpa: string; payeeName: string };
 

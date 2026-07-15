@@ -80,7 +80,7 @@ function Root() {
         <Stack.Screen name="SuperAdmin" component={SuperAdminScreen} options={{ headerShown: false }} />
       ) : (
         <>
-          <Stack.Screen name="Home" component={HomeScreen} options={{ title: '🥛 MilkApp' }} />
+          <Stack.Screen name="Home" component={HomeScreen} options={{ title: '🥛 Neerja Milk Collection' }} />
           <Stack.Screen name="MilkCollection" component={MilkCollectionScreen} options={{ title: 'Milk Collection · दूध' }} />
           <Stack.Screen name="CollectionHistory" component={CollectionHistoryScreen} options={{ title: 'Entries · edit' }} />
           <Stack.Screen name="CollectionEdit" component={CollectionEditScreen} options={{ title: 'Edit entry' }} />

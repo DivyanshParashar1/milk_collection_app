@@ -25,6 +25,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "patch-package": "^8.0.1",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -35,7 +36,8 @@
     "build:apk": "npx -y eas-cli build --platform android --profile production",
     "build:apk:preview": "npx -y eas-cli build --platform android --profile preview",
     "build:apk:dev": "npx -y eas-cli build --platform android --profile development",
-    "build:local": "npx -y eas-cli build --platform android --profile preview --local"
+    "build:local": "npx -y eas-cli build --platform android --profile preview --local",
+    "postinstall": "patch-package"
   },
   "private": true
 }

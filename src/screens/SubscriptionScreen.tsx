@@ -29,7 +29,7 @@ export default function SubscriptionScreen() {
   }, [plan, cfg]);
 
   const payViaUpi = async () => {
-    const url = buildUpiUrl(cfg, plan.price, `MilkApp ${plan.label} subscription`);
+    const url = buildUpiUrl(cfg, plan.price, `Neerja Milk Collection ${plan.label} subscription`);
     openedRef.current = true;
     try {
       await Linking.openURL(url);

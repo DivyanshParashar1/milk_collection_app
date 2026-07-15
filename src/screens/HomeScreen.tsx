@@ -102,7 +102,7 @@ export default function HomeScreen({ navigation }: any) {
       <View style={[styles.wrap, { justifyContent: 'center', padding: 24 }]}>
         <Text style={{ fontSize: 60, textAlign: 'center' }}>🔒</Text>
         <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#c0392b', textAlign: 'center', marginTop: 16 }}>Subscription Expired</Text>
-        <Text style={{ fontSize: 16, color: '#4a5a6a', textAlign: 'center', marginTop: 8, marginBottom: 32 }}>Please renew your subscription to continue using MilkApp.</Text>
+        <Text style={{ fontSize: 16, color: '#4a5a6a', textAlign: 'center', marginTop: 8, marginBottom: 32 }}>Please renew your subscription to continue using Neerja Milk Collection.</Text>
         <TouchableOpacity style={{ backgroundColor: '#1b9c66', padding: 16, borderRadius: 12, alignItems: 'center' }} onPress={() => navigation.navigate('Subscription')}>
           <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>View Subscription Options</Text>
         </TouchableOpacity>
