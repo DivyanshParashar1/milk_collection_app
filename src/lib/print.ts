@@ -157,3 +157,92 @@ export async function exportReportPdf(d: ReportData): Promise<{ error?: string }
     return { error: String(e?.message ?? e) };
   }
 }
+
+// ---------- Datewise report PDF export ----------
+
+export type DatewiseReportData = {
+  society: string;
+  from: string;
+  to: string;
+  rows: { date: string; amLitres: number; pmLitres: number; totalLitres: number; avgFat: number; amount: number; count: number }[];
+  totals: { amLitres: number; pmLitres: number; totalLitres: number; avgFat: number; amount: number; count: number };
+};
+
+export function datewiseReportHtml(d: DatewiseReportData): string {
+  const trs = d.rows
+    .map(
+      (r, i) =>
+        `<tr style="background:${i % 2 === 0 ? '#f8f9fa' : '#fff'}">
+          <td>${esc(r.date)}</td>
+          <td style="text-align:right">${Number(r.amLitres).toFixed(1)}</td>
+          <td style="text-align:right">${Number(r.pmLitres).toFixed(1)}</td>
+          <td style="text-align:right;font-weight:700">${Number(r.totalLitres).toFixed(1)}</td>
+          <td style="text-align:right">${Number(r.avgFat).toFixed(1)}</td>
+          <td style="text-align:right;font-weight:700">Rs ${Number(r.amount).toFixed(0)}</td>
+        </tr>`
+    )
+    .join('');
+  return `<html><head><meta charset="utf-8">
+  <style>
+    body { font-family: -apple-system, Roboto, sans-serif; color:#0d1b2a; padding:16px; }
+    h1 { font-size:20px; margin:0; }
+    .sub { color:#67788a; margin:2px 0 14px; }
+    .cards { display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap; }
+    .card { flex:1; min-width:100px; background:#f3f5f7; border-radius:10px; padding:12px; text-align:center; }
+    .cv { font-size:18px; font-weight:800; }
+    .cl { color:#67788a; font-size:11px; }
+    table { width:100%; border-collapse:collapse; font-size:12px; }
+    th,td { padding:5px 6px; border-bottom:1px solid #e5e9ee; text-align:left; }
+    th { background:#0d1b2a; color:#fff; }
+    .totrow td { background:#0d1b2a; color:#fff; font-weight:800; }
+  </style></head><body>
+    <h1>${esc(d.society)}</h1>
+    <div class="sub">Datewise Report &middot; ${esc(d.from)} → ${esc(d.to)}</div>
+    <div class="cards">
+      <div class="card"><div class="cv">${d.totals.totalLitres.toFixed(1)}</div><div class="cl">Total Litres</div></div>
+      <div class="card"><div class="cv">Rs ${d.totals.amount.toFixed(0)}</div><div class="cl">Amount</div></div>
+      <div class="card"><div class="cv">${d.totals.avgFat.toFixed(1)}%</div><div class="cl">Avg Fat</div></div>
+      <div class="card"><div class="cv">${d.totals.count}</div><div class="cl">Entries</div></div>
+    </div>
+    <table>
+      <tr><th>Date</th><th style="text-align:right">AM L</th><th style="text-align:right">PM L</th><th style="text-align:right">Total L</th><th style="text-align:right">Fat%</th><th style="text-align:right">Rs</th></tr>
+      ${trs || '<tr><td colspan="6">No data</td></tr>'}
+      <tr class="totrow"><td>TOTAL</td>
+        <td style="text-align:right">${d.totals.amLitres.toFixed(1)}</td>
+        <td style="text-align:right">${d.totals.pmLitres.toFixed(1)}</td>
+        <td style="text-align:right">${d.totals.totalLitres.toFixed(1)}</td>
+        <td style="text-align:right">${d.totals.avgFat.toFixed(1)}</td>
+        <td style="text-align:right">Rs ${d.totals.amount.toFixed(0)}</td>
+      </tr>
+    </table>
+  </body></html>`;
+}
+
+export async function exportDatewiseReportPdf(d: DatewiseReportData): Promise<{ error?: string }> {
+  try {
+    if (!(await Sharing.isAvailableAsync())) {
+      return { error: 'Sharing is not available on this device.' };
+    }
+    const { uri } = await Print.printToFileAsync({ html: datewiseReportHtml(d) });
+
+    let shareUri = uri;
+    if (cacheDirectory) {
+      try {
+        const dest = `${cacheDirectory}datewise-${Date.now()}.pdf`;
+        await copyAsync({ from: uri, to: dest });
+        shareUri = dest;
+      } catch {
+        shareUri = uri;
+      }
+    }
+
+    await Sharing.shareAsync(shareUri, {
+      mimeType: 'application/pdf',
+      UTI: 'com.adobe.pdf',
+      dialogTitle: 'Share datewise report',
+    });
+    return {};
+  } catch (e: any) {
+    return { error: String(e?.message ?? e) };
+  }
+}

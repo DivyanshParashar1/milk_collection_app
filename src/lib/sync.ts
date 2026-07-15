@@ -8,9 +8,13 @@ import {
   unsyncedMembers,
   unsyncedCollections,
   unsyncedPayouts,
+  unsyncedLedgerEntries,
+  unsyncedLocalSales,
   markMemberSynced,
   markCollectionSynced,
   markPayoutSynced,
+  markLedgerSynced,
+  markLocalSaleSynced,
   updateCollectionLocal,
   deleteCollectionLocal,
   CollectionValues,
@@ -22,6 +26,8 @@ export type SyncResult = {
   pushedMembers: number;
   pushedCollections: number;
   pushedPayouts: number;
+  pushedLedger: number;
+  pushedLocalSales: number;
   error?: string;
 };
 
@@ -39,11 +45,13 @@ async function currentSocietyId(): Promise<string | null> {
 export async function pushAll(): Promise<SyncResult> {
   const societyId = await currentSocietyId();
   if (!societyId)
-    return { pushedMembers: 0, pushedCollections: 0, pushedPayouts: 0, error: 'Not signed in / no society set' };
+    return { pushedMembers: 0, pushedCollections: 0, pushedPayouts: 0, pushedLedger: 0, pushedLocalSales: 0, error: 'Not signed in / no society set' };
 
   let pushedMembers = 0;
   let pushedCollections = 0;
   let pushedPayouts = 0;
+  let pushedLedger = 0;
+  let pushedLocalSales = 0;
 
   // --- members ---
   const members = await unsyncedMembers();
@@ -67,7 +75,7 @@ export async function pushAll(): Promise<SyncResult> {
       )
       .select('id')
       .single();
-    if (error) return { pushedMembers, pushedCollections, pushedPayouts, error: error.message };
+    if (error) return { pushedMembers, pushedCollections, pushedPayouts, pushedLedger, pushedLocalSales, error: error.message };
     await markMemberSynced(m.local_id, data.id);
     pushedMembers++;
   }
@@ -96,7 +104,7 @@ export async function pushAll(): Promise<SyncResult> {
       })
       .select('id')
       .single();
-    if (error) return { pushedMembers, pushedCollections, pushedPayouts, error: error.message };
+    if (error) return { pushedMembers, pushedCollections, pushedPayouts, pushedLedger, pushedLocalSales, error: error.message };
     await markCollectionSynced(c.local_id, data.id);
     pushedCollections++;
   }
@@ -116,12 +124,53 @@ export async function pushAll(): Promise<SyncResult> {
       })
       .select('id')
       .single();
-    if (error) return { pushedMembers, pushedCollections, pushedPayouts, error: error.message };
+    if (error) return { pushedMembers, pushedCollections, pushedPayouts, pushedLedger, pushedLocalSales, error: error.message };
     await markPayoutSynced(p.local_id, data.id);
     pushedPayouts++;
   }
 
-  return { pushedMembers, pushedCollections, pushedPayouts };
+  // --- ledger entries (jama / udhar) ---
+  const ledger = await unsyncedLedgerEntries();
+  for (const le of ledger) {
+    const { data, error } = await supabase
+      .from('ledger_entries')
+      .insert({
+        society_id: societyId,
+        membercode: le.membercode,
+        amount: le.amount,
+        kind: le.kind,
+        note: le.note,
+        entry_date: le.entry_date,
+      })
+      .select('id')
+      .single();
+    if (error) return { pushedMembers, pushedCollections, pushedPayouts, pushedLedger, pushedLocalSales, error: error.message };
+    await markLedgerSynced(le.local_id, data.id);
+    pushedLedger++;
+  }
+
+  // --- local sales ---
+  const sales = await unsyncedLocalSales();
+  for (const s of sales) {
+    const { data, error } = await supabase
+      .from('local_sales')
+      .insert({
+        society_id: societyId,
+        customer_name: s.customer_name,
+        quantity: s.quantity,
+        rate: s.rate,
+        amount: s.amount,
+        milk_type: s.milk_type,
+        sale_date: s.sale_date,
+      })
+      .select('id')
+      .single();
+    if (error) return { pushedMembers, pushedCollections, pushedPayouts, pushedLedger, pushedLocalSales, error: error.message };
+    await markLocalSaleSynced(s.local_id, data.id);
+    pushedLocalSales++;
+  }
+
+  return { pushedMembers, pushedCollections, pushedPayouts, pushedLedger, pushedLocalSales };
 }
 
 // --- Edit / delete a collection, keeping local + server consistent ---------

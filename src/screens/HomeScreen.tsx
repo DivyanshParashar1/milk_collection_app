@@ -10,9 +10,12 @@ const TILES: { en: string; hi: string; icon: string; route: string; color: strin
   { en: 'Milk Collection', hi: 'दूध संग्रह', icon: '🥛', route: 'MilkCollection', color: '#1b9c66' },
   { en: 'Pay Farmer', hi: 'भुगतान', icon: '💰', route: 'Payout', color: '#2a6fdb' },
   { en: 'Farmers', hi: 'किसान', icon: '👨‍🌾', route: 'MembersList', color: '#e0821b' },
+  { en: 'Ledger', hi: 'जमा/उधार', icon: '📒', route: 'Ledger', color: '#6c5ce7' },
+  { en: 'Local Sale', hi: 'स्थानीय बिक्री', icon: '🏪', route: 'LocalSales', color: '#d63031' },
   { en: 'Rate Chart', hi: 'रेट चार्ट', icon: '📋', route: 'RateChart', color: '#c0392b' },
+  { en: 'Deductions', hi: 'कपात', icon: '✂️', route: 'Kapat', color: '#8a3ffc' },
   { en: 'Reports', hi: 'रिपोर्ट', icon: '📊', route: 'Reports', color: '#0d7a86' },
-  { en: 'Subscription', hi: 'सदस्यता', icon: '⭐', route: 'Subscription', color: '#8a3ffc' },
+  { en: 'Subscription', hi: 'सदस्यता', icon: '⭐', route: 'Subscription', color: '#fdcb6e' },
 ];
 
 export default function HomeScreen({ navigation }: any) {
@@ -36,7 +39,7 @@ export default function HomeScreen({ navigation }: any) {
     try {
       const r = await pushAll();
       if (r.error) Alert.alert('Sync failed', r.error);
-      else Alert.alert('Synced ✓', `${r.pushedMembers} farmers · ${r.pushedCollections} collections · ${r.pushedPayouts} payouts uploaded`);
+      else Alert.alert('Synced ✓', `${r.pushedMembers} farmers · ${r.pushedCollections} collections · ${r.pushedPayouts} payouts · ${r.pushedLedger} ledger · ${r.pushedLocalSales} sales uploaded`);
       await load();
     } finally {
       setSyncing(false);

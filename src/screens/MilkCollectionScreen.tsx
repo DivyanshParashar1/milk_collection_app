@@ -4,7 +4,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { computeMilk, RateEntry } from '../lib/calc';
-import { getMemberByCode, getRateChart, insertCollection, recentCollections } from '../lib/db';
+import { getMemberByCode, getRateChart, insertCollection, recentCollections, isSessionLocked, lockSession, unlockSession } from '../lib/db';
 import { getSettings } from '../lib/settings';
 import { printCollectionSlip } from '../lib/print';
 
@@ -22,6 +22,7 @@ export default function MilkCollectionScreen({ navigation }: any) {
   const [societyName, setSocietyName] = useState('My Dairy');
   const [autoPrint, setAutoPrint] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [locked, setLocked] = useState(false);
   const sessionInit = useRef(false);
 
   useEffect(() => {
@@ -44,7 +45,9 @@ export default function MilkCollectionScreen({ navigation }: any) {
     useCallback(() => {
       getRateChart().then((c) => setChart(c as RateEntry[]));
       loadRecent();
-    }, [])
+      const today = new Date().toISOString().slice(0, 10);
+      isSessionLocked(today, session).then(setLocked);
+    }, [session])
   );
 
   // resolve member name as the code is typed
@@ -78,6 +81,7 @@ export default function MilkCollectionScreen({ navigation }: any) {
     if (!memberName) return Alert.alert('Unknown member', `No member ${c}. Add them first.`);
     if (!(parseFloat(weight) > 0)) return Alert.alert('Missing', 'Enter weight');
     if (calc.rate === 0) return Alert.alert('No rate', 'No rate found for this fat. Check the rate chart.');
+    if (locked) return Alert.alert('Session locked 🔒', 'This session is locked. Unlock it first to add entries.');
 
     setSaving(true);
     try {
@@ -120,9 +124,24 @@ export default function MilkCollectionScreen({ navigation }: any) {
       <View style={styles.sessionRow}>
         {([[0, 'Morning'], [1, 'Evening']] as const).map(([s, lbl]) => (
           <TouchableOpacity key={s} style={[styles.seg, session === s && styles.segActive]} onPress={() => setSession(s as 0 | 1)}>
-            <Text style={[styles.segText, session === s && styles.segTextActive]}>{lbl}</Text>
+            <Text style={[styles.segText, session === s && styles.segTextActive]}>{lbl}{session === s && locked ? ' 🔒' : ''}</Text>
           </TouchableOpacity>
         ))}
+        <TouchableOpacity
+          style={[styles.lockBtn, locked ? styles.lockBtnLocked : styles.lockBtnOpen]}
+          onPress={async () => {
+            const today = new Date().toISOString().slice(0, 10);
+            if (locked) { await unlockSession(today, session); setLocked(false); }
+            else {
+              Alert.alert('Lock session?', `No more entries can be added to ${session === 0 ? 'Morning' : 'Evening'} today.`, [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Lock', style: 'destructive', onPress: async () => { await lockSession(today, session); setLocked(true); } },
+              ]);
+            }
+          }}
+        >
+          <Text style={styles.lockBtnText}>{locked ? '🔓' : '🔒'}</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.card}>
@@ -233,4 +252,8 @@ const styles = StyleSheet.create({
   recentAmt: { fontWeight: '700', color: '#1b9c66' },
   dotOk: { color: '#1b9c66', fontSize: 12 },
   dotPending: { color: '#e08e0b', fontSize: 12 },
+  lockBtn: { width: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  lockBtnOpen: { backgroundColor: '#e5e9ee' },
+  lockBtnLocked: { backgroundColor: '#fde8e8' },
+  lockBtnText: { fontSize: 18 },
 });

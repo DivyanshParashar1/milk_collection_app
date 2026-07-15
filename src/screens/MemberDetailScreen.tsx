@@ -29,13 +29,16 @@ export default function MemberDetailScreen({ route, navigation }: any) {
         <Text style={styles.name}>{member.name}</Text>
         <Text style={styles.sub}>Code {member.membercode}{member.mobile1 ? ` · ${member.mobile1}` : ''}</Text>
         {!!member.upi_id && <Text style={styles.sub}>UPI: {member.upi_id}</Text>}
-        <Text style={styles.balanceLbl}>Balance to pay / बकाया</Text>
-        <Text style={styles.balance}>₹{balance.toFixed(0)}</Text>
+        <Text style={styles.balanceLbl}>{balance >= 0 ? 'To pay farmer / बकाया' : 'Farmer owes / वसूली'}</Text>
+        <Text style={[styles.balance, { color: balance >= 0 ? '#43e08e' : '#ff6b6b' }]}>{balance >= 0 ? '' : '−'}₹{Math.abs(balance).toFixed(0)}</Text>
       </View>
 
       <View style={styles.actionRow}>
         <TouchableOpacity style={[styles.action, styles.payAction]} onPress={() => navigation.navigate('Payout', { membercode })}>
           <Text style={styles.actionIcon}>💰</Text><Text style={styles.actionText}>Pay</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.action, { backgroundColor: '#6c5ce7' }]} onPress={() => navigation.navigate('MemberPassbook', { membercode })}>
+          <Text style={styles.actionIcon}>📒</Text><Text style={styles.actionText}>Passbook</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.action, styles.editAction]} onPress={() => navigation.navigate('MemberForm', { editCode: membercode })}>
           <Text style={styles.actionIcon}>✏️</Text><Text style={styles.actionText}>Edit</Text>

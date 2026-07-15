@@ -34,7 +34,7 @@ function presetRange(preset: Preset): { from: string; to: string } {
   return { from: '0000-01-01', to: '9999-12-31' };
 }
 
-export default function ReportsScreen() {
+export default function ReportsScreen({ navigation }: any) {
   const [preset, setPreset] = useState<Preset>('today');
   const [summary, setSummary] = useState<CollectionSummary>({ litres: 0, amount: 0, count: 0, avgFat: 0, amLitres: 0, pmLitres: 0 });
   const [payout, setPayout] = useState({ cash: 0, upi: 0, total: 0, count: 0 });
@@ -111,6 +111,10 @@ export default function ReportsScreen() {
 
       <TouchableOpacity style={styles.shareBtn} onPress={share} disabled={sharing}>
         {sharing ? <ActivityIndicator color="#fff" /> : <Text style={styles.shareText}>⤓  Share / print report (PDF)</Text>}
+      </TouchableOpacity>
+
+      <TouchableOpacity style={[styles.shareBtn, { backgroundColor: '#2a6fdb' }]} onPress={() => navigation.navigate('DatewiseReport')}>
+        <Text style={styles.shareText}>📅  Datewise detail report</Text>
       </TouchableOpacity>
 
       {/* per-farmer breakdown */}

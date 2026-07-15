@@ -71,6 +71,61 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
       snf  REAL,
       rate REAL NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS ledger_entries (
+      local_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+      remote_id    TEXT,
+      membercode   INTEGER NOT NULL,
+      amount       REAL NOT NULL,
+      kind         TEXT NOT NULL,          -- 'jama' (credit) | 'udhar' (debit)
+      note         TEXT,
+      entry_date   TEXT DEFAULT (date('now')),
+      synced       INTEGER DEFAULT 0,
+      created_at   TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS local_sales (
+      local_id       INTEGER PRIMARY KEY AUTOINCREMENT,
+      remote_id      TEXT,
+      customer_name  TEXT,
+      quantity       REAL NOT NULL,
+      rate           REAL NOT NULL,
+      amount         REAL NOT NULL,
+      milk_type      TEXT DEFAULT 'mix',    -- cow | buff | mix
+      sale_date      TEXT DEFAULT (date('now')),
+      synced         INTEGER DEFAULT 0,
+      created_at     TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS local_sale_rates (
+      milk_type      TEXT PRIMARY KEY,      -- cow | buff | mix
+      rate_per_litre REAL NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS kapat_items (
+      local_id  INTEGER PRIMARY KEY AUTOINCREMENT,
+      remote_id TEXT,
+      name      TEXT NOT NULL,
+      type      TEXT NOT NULL DEFAULT 'percent', -- 'percent' | 'fixed'
+      value     REAL NOT NULL DEFAULT 0,
+      active    INTEGER DEFAULT 1,
+      synced    INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS member_kapat (
+      membercode INTEGER NOT NULL,
+      kapat_id   INTEGER NOT NULL,
+      active     INTEGER DEFAULT 1,
+      PRIMARY KEY (membercode, kapat_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS session_locks (
+      collect_date TEXT NOT NULL,
+      session      INTEGER NOT NULL,        -- 0 = AM, 1 = PM
+      locked       INTEGER DEFAULT 0,
+      UNIQUE(collect_date, session)
+    );
   `);
 
   // lightweight migrations for installs created before a column existed
@@ -143,7 +198,7 @@ export async function updateMember(m: LocalMember) {
   );
 }
 
-/** All members with their current balance (milk value earned − paid out). */
+/** All members with their current balance (milk earned + jama − payouts − udhar). */
 export async function membersWithBalances(): Promise<any[]> {
   const db = await getDb();
   const members: any[] = await db.getAllAsync(`SELECT * FROM members ORDER BY membercode`);
@@ -153,12 +208,21 @@ export async function membersWithBalances(): Promise<any[]> {
   const paid: any[] = await db.getAllAsync(
     `SELECT membercode, COALESCE(SUM(amount),0) v FROM payouts GROUP BY membercode`
   );
+  const jamaMap: any[] = await db.getAllAsync(
+    `SELECT membercode, COALESCE(SUM(CASE WHEN kind='jama' THEN amount ELSE 0 END),0) jama,
+            COALESCE(SUM(CASE WHEN kind='udhar' THEN amount ELSE 0 END),0) udhar
+     FROM ledger_entries GROUP BY membercode`
+  );
   const em = new Map(earned.map((r) => [r.membercode, r.v]));
   const pm = new Map(paid.map((r) => [r.membercode, r.v]));
-  return members.map((m) => ({
-    ...m,
-    balance: Math.max(0, (em.get(m.membercode) ?? 0) - (pm.get(m.membercode) ?? 0)),
-  }));
+  const lm = new Map(jamaMap.map((r) => [r.membercode, { jama: r.jama, udhar: r.udhar }]));
+  return members.map((m) => {
+    const ledger = lm.get(m.membercode) ?? { jama: 0, udhar: 0 };
+    return {
+      ...m,
+      balance: (em.get(m.membercode) ?? 0) + ledger.jama - (pm.get(m.membercode) ?? 0) - ledger.udhar,
+    };
+  });
 }
 
 export async function memberCollections(membercode: number, limit = 20): Promise<any[]> {
@@ -353,8 +417,8 @@ export async function insertPayout(p: LocalPayout) {
 }
 
 /**
- * How much this farmer is still owed = total milk value (pay_price) minus what
- * has already been paid out. Used to pre-fill the payout amount.
+ * Net balance = (milk earnings + jama) − (payouts + udhar).
+ * Positive = society owes farmer. Negative = farmer owes society.
  */
 export async function farmerBalance(membercode: number): Promise<number> {
   const db = await getDb();
@@ -366,7 +430,13 @@ export async function farmerBalance(membercode: number): Promise<number> {
     `SELECT COALESCE(SUM(amount),0) v FROM payouts WHERE membercode = ?`,
     [membercode]
   );
-  return Math.max(0, (earned?.v ?? 0) - (paid?.v ?? 0));
+  const ledger: any = await db.getFirstAsync(
+    `SELECT COALESCE(SUM(CASE WHEN kind='jama' THEN amount ELSE 0 END),0) jama,
+            COALESCE(SUM(CASE WHEN kind='udhar' THEN amount ELSE 0 END),0) udhar
+     FROM ledger_entries WHERE membercode = ?`,
+    [membercode]
+  );
+  return (earned?.v ?? 0) + (ledger?.jama ?? 0) - (paid?.v ?? 0) - (ledger?.udhar ?? 0);
 }
 
 // ---------- Sync helpers ----------
@@ -399,5 +469,267 @@ export async function pendingCount(): Promise<number> {
   const a: any = await db.getFirstAsync(`SELECT COUNT(*) c FROM members WHERE synced = 0`);
   const b: any = await db.getFirstAsync(`SELECT COUNT(*) c FROM milk_collections WHERE synced = 0`);
   const c: any = await db.getFirstAsync(`SELECT COUNT(*) c FROM payouts WHERE synced = 0`);
-  return (a?.c ?? 0) + (b?.c ?? 0) + (c?.c ?? 0);
+  const d: any = await db.getFirstAsync(`SELECT COUNT(*) c FROM ledger_entries WHERE synced = 0`);
+  const e: any = await db.getFirstAsync(`SELECT COUNT(*) c FROM local_sales WHERE synced = 0`);
+  return (a?.c ?? 0) + (b?.c ?? 0) + (c?.c ?? 0) + (d?.c ?? 0) + (e?.c ?? 0);
 }
+
+// ---------- Ledger (Jama / Udhar) ----------
+export type LocalLedgerEntry = {
+  membercode: number;
+  amount: number;
+  kind: 'jama' | 'udhar';
+  note?: string;
+  entry_date?: string;
+};
+
+export async function insertLedgerEntry(e: LocalLedgerEntry) {
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT INTO ledger_entries (membercode, amount, kind, note, entry_date, synced)
+     VALUES (?, ?, ?, ?, ?, 0)`,
+    [e.membercode, e.amount, e.kind, e.note ?? null, e.entry_date ?? new Date().toISOString().slice(0, 10)]
+  );
+}
+
+export async function recentLedgerEntries(limit = 30): Promise<any[]> {
+  const db = await getDb();
+  return db.getAllAsync(
+    `SELECT le.*, m.name FROM ledger_entries le
+     LEFT JOIN members m ON m.membercode = le.membercode
+     ORDER BY le.local_id DESC LIMIT ?`,
+    [limit]
+  );
+}
+
+export async function memberLedger(membercode: number, limit = 50): Promise<any[]> {
+  const db = await getDb();
+  return db.getAllAsync(
+    `SELECT * FROM ledger_entries WHERE membercode = ? ORDER BY local_id DESC LIMIT ?`,
+    [membercode, limit]
+  );
+}
+
+export async function ledgerBalance(membercode: number): Promise<{ jama: number; udhar: number; net: number }> {
+  const db = await getDb();
+  const r: any = await db.getFirstAsync(
+    `SELECT COALESCE(SUM(CASE WHEN kind='jama'  THEN amount ELSE 0 END),0) jama,
+            COALESCE(SUM(CASE WHEN kind='udhar' THEN amount ELSE 0 END),0) udhar
+     FROM ledger_entries WHERE membercode = ?`,
+    [membercode]
+  );
+  const jama = r?.jama ?? 0;
+  const udhar = r?.udhar ?? 0;
+  return { jama, udhar, net: jama - udhar };
+}
+
+export async function unsyncedLedgerEntries(): Promise<any[]> {
+  const db = await getDb();
+  return db.getAllAsync(`SELECT * FROM ledger_entries WHERE synced = 0`);
+}
+
+export async function markLedgerSynced(localId: number, remoteId: string) {
+  const db = await getDb();
+  await db.runAsync(`UPDATE ledger_entries SET synced = 1, remote_id = ? WHERE local_id = ?`, [remoteId, localId]);
+}
+
+// ---------- Member Passbook (unified view) ----------
+export type PassbookEntry = {
+  date: string;
+  type: 'collection' | 'payout' | 'jama' | 'udhar';
+  description: string;
+  credit: number;
+  debit: number;
+};
+
+export async function memberPassbook(membercode: number): Promise<PassbookEntry[]> {
+  const db = await getDb();
+  // Union of all 3 record types, sorted by date
+  const rows: any[] = await db.getAllAsync(
+    `SELECT collect_date as date, 'collection' as type,
+            weight || 'L · ' || fat || '% fat' as description,
+            pay_price as credit, 0 as debit
+     FROM milk_collections WHERE membercode = ?
+     UNION ALL
+     SELECT date(paid_at) as date, 'payout' as type,
+            method || COALESCE(' · ' || note, '') as description,
+            0 as credit, amount as debit
+     FROM payouts WHERE membercode = ?
+     UNION ALL
+     SELECT entry_date as date, kind as type,
+            COALESCE(note, kind) as description,
+            CASE WHEN kind='jama' THEN amount ELSE 0 END as credit,
+            CASE WHEN kind='udhar' THEN amount ELSE 0 END as debit
+     FROM ledger_entries WHERE membercode = ?
+     ORDER BY date DESC, credit DESC`,
+    [membercode, membercode, membercode]
+  );
+  return rows;
+}
+
+// ---------- Local Sales ----------
+export type LocalSale = {
+  customer_name?: string;
+  quantity: number;
+  rate: number;
+  amount: number;
+  milk_type?: string;
+  sale_date?: string;
+};
+
+export async function insertLocalSale(s: LocalSale) {
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT INTO local_sales (customer_name, quantity, rate, amount, milk_type, sale_date, synced)
+     VALUES (?, ?, ?, ?, ?, ?, 0)`,
+    [s.customer_name ?? null, s.quantity, s.rate, s.amount, s.milk_type ?? 'mix', s.sale_date ?? new Date().toISOString().slice(0, 10)]
+  );
+}
+
+export async function recentLocalSales(limit = 30): Promise<any[]> {
+  const db = await getDb();
+  return db.getAllAsync(`SELECT * FROM local_sales ORDER BY local_id DESC LIMIT ?`, [limit]);
+}
+
+export async function todayLocalSaleTotals(): Promise<{ quantity: number; amount: number; count: number }> {
+  const db = await getDb();
+  const r: any = await db.getFirstAsync(
+    `SELECT COALESCE(SUM(quantity),0) quantity, COALESCE(SUM(amount),0) amount, COUNT(*) count
+     FROM local_sales WHERE sale_date = date('now')`
+  );
+  return { quantity: r?.quantity ?? 0, amount: r?.amount ?? 0, count: r?.count ?? 0 };
+}
+
+export async function unsyncedLocalSales(): Promise<any[]> {
+  const db = await getDb();
+  return db.getAllAsync(`SELECT * FROM local_sales WHERE synced = 0`);
+}
+
+export async function markLocalSaleSynced(localId: number, remoteId: string) {
+  const db = await getDb();
+  await db.runAsync(`UPDATE local_sales SET synced = 1, remote_id = ? WHERE local_id = ?`, [remoteId, localId]);
+}
+
+// ---------- Local Sale Rates ----------
+export async function getLocalSaleRates(): Promise<{ milk_type: string; rate_per_litre: number }[]> {
+  const db = await getDb();
+  return db.getAllAsync(`SELECT * FROM local_sale_rates ORDER BY milk_type`);
+}
+
+export async function setLocalSaleRate(milkType: string, rate: number) {
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT OR REPLACE INTO local_sale_rates (milk_type, rate_per_litre) VALUES (?, ?)`,
+    [milkType, rate]
+  );
+}
+
+// ---------- Kapat (Deductions) ----------
+export type LocalKapatItem = {
+  name: string;
+  type: 'percent' | 'fixed';
+  value: number;
+};
+
+export async function insertKapatItem(k: LocalKapatItem) {
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT INTO kapat_items (name, type, value, active, synced) VALUES (?, ?, ?, 1, 0)`,
+    [k.name, k.type, k.value]
+  );
+}
+
+export async function updateKapatItem(localId: number, k: LocalKapatItem) {
+  const db = await getDb();
+  await db.runAsync(
+    `UPDATE kapat_items SET name=?, type=?, value=?, synced=0 WHERE local_id=?`,
+    [k.name, k.type, k.value, localId]
+  );
+}
+
+export async function deleteKapatItem(localId: number) {
+  const db = await getDb();
+  await db.runAsync(`DELETE FROM kapat_items WHERE local_id = ?`, [localId]);
+  await db.runAsync(`DELETE FROM member_kapat WHERE kapat_id = ?`, [localId]);
+}
+
+export async function listKapatItems(): Promise<any[]> {
+  const db = await getDb();
+  return db.getAllAsync(`SELECT * FROM kapat_items WHERE active = 1 ORDER BY name`);
+}
+
+export async function toggleMemberKapat(membercode: number, kapatId: number, active: boolean) {
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT OR REPLACE INTO member_kapat (membercode, kapat_id, active) VALUES (?, ?, ?)`,
+    [membercode, kapatId, active ? 1 : 0]
+  );
+}
+
+export async function getMemberKapat(membercode: number): Promise<any[]> {
+  const db = await getDb();
+  return db.getAllAsync(
+    `SELECT ki.*, COALESCE(mk.active, 0) as assigned
+     FROM kapat_items ki
+     LEFT JOIN member_kapat mk ON mk.kapat_id = ki.local_id AND mk.membercode = ?
+     WHERE ki.active = 1
+     ORDER BY ki.name`,
+    [membercode]
+  );
+}
+
+// ---------- Session Locks ----------
+export async function isSessionLocked(date: string, session: number): Promise<boolean> {
+  const db = await getDb();
+  const r: any = await db.getFirstAsync(
+    `SELECT locked FROM session_locks WHERE collect_date = ? AND session = ?`,
+    [date, session]
+  );
+  return r?.locked === 1;
+}
+
+export async function lockSession(date: string, session: number) {
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT OR REPLACE INTO session_locks (collect_date, session, locked) VALUES (?, ?, 1)`,
+    [date, session]
+  );
+}
+
+export async function unlockSession(date: string, session: number) {
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT OR REPLACE INTO session_locks (collect_date, session, locked) VALUES (?, ?, 0)`,
+    [date, session]
+  );
+}
+
+// ---------- Datewise Summary Report ----------
+export type DatewiseRow = {
+  date: string;
+  amLitres: number;
+  pmLitres: number;
+  totalLitres: number;
+  avgFat: number;
+  amount: number;
+  count: number;
+};
+
+export async function datewiseSummary(from: string, to: string): Promise<DatewiseRow[]> {
+  const db = await getDb();
+  return db.getAllAsync(
+    `SELECT collect_date as date,
+            COALESCE(SUM(CASE WHEN session=0 THEN weight ELSE 0 END),0) amLitres,
+            COALESCE(SUM(CASE WHEN session=1 THEN weight ELSE 0 END),0) pmLitres,
+            COALESCE(SUM(weight),0) totalLitres,
+            COALESCE(AVG(fat),0)    avgFat,
+            COALESCE(SUM(price),0)  amount,
+            COUNT(*)                count
+     FROM milk_collections
+     WHERE collect_date BETWEEN ? AND ?
+     GROUP BY collect_date
+     ORDER BY collect_date DESC`,
+    [from, to]
+  );
+}
+

@@ -211,3 +211,21 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function handle_new_user();
+
+-- ---------- LOCAL SALES (direct-to-consumer) --------------------------------
+create table if not exists local_sales (
+  id             uuid primary key default gen_random_uuid(),
+  society_id     uuid not null references societies(id) on delete cascade,
+  customer_name  text,
+  quantity       numeric not null,
+  rate           numeric not null,
+  amount         numeric not null,
+  milk_type      text default 'mix',
+  sale_date      date default current_date,
+  created_at     timestamptz default now()
+);
+create index if not exists idx_local_sales_society on local_sales(society_id, sale_date);
+
+alter table local_sales enable row level security;
+create policy "society rw" on local_sales
+  for all using (society_id = current_society_id()) with check (society_id = current_society_id());

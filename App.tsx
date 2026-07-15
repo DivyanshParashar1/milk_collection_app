@@ -20,6 +20,12 @@ import RateChartScreen from './src/screens/RateChartScreen';
 import ReportsScreen from './src/screens/ReportsScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import SubscriptionScreen from './src/screens/SubscriptionScreen';
+import LedgerScreen from './src/screens/LedgerScreen';
+import MemberPassbookScreen from './src/screens/MemberPassbookScreen';
+import LocalSalesScreen from './src/screens/LocalSalesScreen';
+import LocalSaleRateScreen from './src/screens/LocalSaleRateScreen';
+import KapatScreen from './src/screens/KapatScreen';
+import DatewiseReportScreen from './src/screens/DatewiseReportScreen';
 
 const Stack = createNativeStackNavigator();
 const green = '#1b9c66';
@@ -60,6 +66,12 @@ function Root() {
           <Stack.Screen name="Reports" component={ReportsScreen} options={{ title: 'Reports · रिपोर्ट' }} />
           <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings · सेटिंग' }} />
           <Stack.Screen name="Subscription" component={SubscriptionScreen} options={{ title: 'Subscription' }} />
+          <Stack.Screen name="Ledger" component={LedgerScreen} options={{ title: 'Ledger · जमा/उधार' }} />
+          <Stack.Screen name="MemberPassbook" component={MemberPassbookScreen} options={{ title: 'Passbook · खाता' }} />
+          <Stack.Screen name="LocalSales" component={LocalSalesScreen} options={{ title: 'Local Sale · बिक्री' }} />
+          <Stack.Screen name="LocalSaleRate" component={LocalSaleRateScreen} options={{ title: 'Sale Rates · दर' }} />
+          <Stack.Screen name="Kapat" component={KapatScreen} options={{ title: 'Deductions · कपात' }} />
+          <Stack.Screen name="DatewiseReport" component={DatewiseReportScreen} options={{ title: 'Datewise · तारीखवार' }} />
         </>
       )}
     </Stack.Navigator>

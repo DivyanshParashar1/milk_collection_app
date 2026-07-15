@@ -51,8 +51,8 @@ export default function MembersListScreen({ navigation }: any) {
               {!!item.mobile1 && <Text style={styles.mobile}>{item.mobile1}</Text>}
             </View>
             <View style={{ alignItems: 'flex-end' }}>
-              <Text style={styles.balance}>₹{Number(item.balance).toFixed(0)}</Text>
-              <Text style={styles.balanceLbl}>balance</Text>
+              <Text style={[styles.balance, { color: Number(item.balance) >= 0 ? '#1b9c66' : '#c0392b' }]}>{Number(item.balance) >= 0 ? '' : '−'}₹{Math.abs(Number(item.balance)).toFixed(0)}</Text>
+              <Text style={styles.balanceLbl}>{Number(item.balance) >= 0 ? 'to pay' : 'owes'}</Text>
             </View>
           </TouchableOpacity>
         )}
