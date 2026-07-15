@@ -1,8 +1,10 @@
 import React, { useCallback, useLayoutEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator, RefreshControl, Modal, Linking } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const SUPPORT_PHONE = '7737115459';
+const LAST_SYNC_KEY = 'last_sync_time';
 import { useAuth } from '../context/AuthContext';
 import { getSettings } from '../lib/settings';
 import { todayTotals, pendingCount } from '../lib/db';
@@ -34,6 +36,8 @@ export default function HomeScreen({ navigation }: any) {
   const [syncing, setSyncing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [lastSync, setLastSync] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   // Three-dot menu button next to the app name in the top bar.
   useLayoutEffect(() => {
@@ -49,6 +53,8 @@ export default function HomeScreen({ navigation }: any) {
   const load = useCallback(async () => {
     setTotals(await todayTotals());
     setPending(await pendingCount());
+    const saved = await AsyncStorage.getItem(LAST_SYNC_KEY);
+    setLastSync(saved);
 
     const s = await getSettings();
     if (s.isActive === false) {
@@ -74,13 +80,17 @@ export default function HomeScreen({ navigation }: any) {
 
   const doSync = async () => {
     setSyncing(true);
+    setSyncError(null);
     try {
       const r = await pushAll();
-      if (r.error) { Alert.alert('Push failed', r.error); await load(); setSyncing(false); return; }
+      if (r.error) { setSyncError(r.error); await load(); setSyncing(false); return; }
       const p = await pullAll();
-      if (p.error) Alert.alert('Pull warning', p.error);
+      if (p.error) setSyncError(p.error);
       const pushed = r.pushedMembers + r.pushedCollections + r.pushedPayouts + r.pushedLedger + r.pushedLocalSales + r.pushedUnionSales;
-      Alert.alert('Synced ✓', `⬆️ ${pushed} pushed · ⬇️ ${p.pulled} pulled`);
+      const now = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+      await AsyncStorage.setItem(LAST_SYNC_KEY, now);
+      setLastSync(now);
+      if (!p.error) Alert.alert('Synced ✓', `⬆️ ${pushed} pushed · ⬇️ ${p.pulled} pulled`);
       await load();
     } finally {
       setSyncing(false);
@@ -123,15 +133,20 @@ export default function HomeScreen({ navigation }: any) {
       </View>
 
       <TouchableOpacity
-        style={[styles.syncBar, pending > 0 ? styles.syncPending : styles.syncClean]}
+        style={[styles.syncBar, syncError ? styles.syncError : pending > 0 ? styles.syncPending : styles.syncClean]}
         onPress={doSync}
         onLongPress={() => showHelp('Sync', 'अपलोड', 'सारा डेटा ऑनलाइन सुरक्षित करें।', 'Upload and back up all your data online.')}
         disabled={syncing}
       >
         {syncing ? <ActivityIndicator color="#fff" /> : (
-          <Text style={styles.syncText}>
-            {pending > 0 ? `⬆︎  Upload ${pending} pending` : '✓  All saved online'}
-          </Text>
+          <>
+            <Text style={styles.syncText}>
+              {syncError ? `⚠ Error — tap to retry` : pending > 0 ? `⬆︎  Upload ${pending} pending` : '✓  All saved online'}
+            </Text>
+            {lastSync && !syncError && (
+              <Text style={styles.syncSub}>Last sync: {lastSync}</Text>
+            )}
+          </>
         )}
       </TouchableOpacity>
 
@@ -163,7 +178,17 @@ export default function HomeScreen({ navigation }: any) {
           <MenuItem icon="⚙️" label="Settings · सेटिंग" onPress={() => { setMenuOpen(false); navigation.navigate('Settings'); }} />
           <MenuItem icon="📞" label="Contact us · संपर्क" onPress={() => { setMenuOpen(false); Linking.openURL(`tel:${SUPPORT_PHONE}`); }} />
           <View style={styles.menuDivider} />
-          <MenuItem icon="🚪" label="Sign out · लॉग आउट" onPress={() => { setMenuOpen(false); signOut(); }} />
+          <MenuItem icon="🚪" label="Sign out · लॉग आउट" onPress={() => {
+            setMenuOpen(false);
+            Alert.alert(
+              'Sign out? / लॉग आउट?',
+              'Make sure you have synced before signing out. / लॉग आउट से पहले सिंक करें।',
+              [
+                { text: 'Cancel / रद्द', style: 'cancel' },
+                { text: 'Sign out', style: 'destructive', onPress: signOut },
+              ]
+            );
+          }} />
         </View>
       </TouchableOpacity>
     </Modal>
@@ -200,10 +225,12 @@ const styles = StyleSheet.create({
   stat: { flex: 1, backgroundColor: '#fff', borderRadius: 14, padding: 14, alignItems: 'center' },
   statValue: { fontSize: 24, fontWeight: '800', color: '#1b9c66' },
   statLabel: { color: '#67788a', marginTop: 4, fontSize: 12, textAlign: 'center' },
-  syncBar: { borderRadius: 12, padding: 16, alignItems: 'center', marginBottom: 20 },
+  syncBar: { borderRadius: 12, padding: 14, alignItems: 'center', marginBottom: 20 },
   syncPending: { backgroundColor: '#e08e0b' },
   syncClean: { backgroundColor: '#1b9c66' },
+  syncError: { backgroundColor: '#c0392b' },
   syncText: { color: '#fff', fontWeight: '800', fontSize: 16 },
+  syncSub: { color: 'rgba(255,255,255,0.75)', fontSize: 11, marginTop: 2 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   tile: { width: '48%', borderRadius: 16, padding: 16, alignItems: 'center' },
   tileIcon: { fontSize: 32, marginBottom: 8 },

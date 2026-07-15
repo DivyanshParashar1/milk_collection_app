@@ -252,6 +252,15 @@ export async function updateMember(m: LocalMember) {
   );
 }
 
+/** Delete a member and all their local data (collections, payouts, ledger). */
+export async function deleteMember(membercode: number) {
+  const db = await getDb();
+  await db.runAsync(`DELETE FROM milk_collections WHERE membercode=?`, [membercode]);
+  await db.runAsync(`DELETE FROM payouts WHERE membercode=?`, [membercode]);
+  await db.runAsync(`DELETE FROM ledger_entries WHERE membercode=?`, [membercode]);
+  await db.runAsync(`DELETE FROM members WHERE membercode=?`, [membercode]);
+}
+
 /** All members with their current balance (milk earned + jama − payouts − udhar). */
 export async function membersWithBalances(): Promise<any[]> {
   const db = await getDb();

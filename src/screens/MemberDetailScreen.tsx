@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { getMemberByCode, farmerBalance, memberCollections, memberPayouts } from '../lib/db';
+import { getMemberByCode, farmerBalance, memberCollections, memberPayouts, deleteMember } from '../lib/db';
 
 export default function MemberDetailScreen({ route, navigation }: any) {
   const membercode: number = route.params.membercode;
@@ -21,7 +21,41 @@ export default function MemberDetailScreen({ route, navigation }: any) {
     }, [membercode])
   );
 
-  if (!member) return <View style={styles.wrap} />;
+  if (!member) return (
+    <View style={[styles.wrap, { justifyContent: 'center', alignItems: 'center' }]}>
+      <ActivityIndicator size="large" color="#1b9c66" />
+    </View>
+  );
+
+  const onDelete = () => {
+    Alert.alert(
+      'Delete farmer? / किसान हटाएं?',
+      `"${member.name}" और उनका सारा डेटा हट जाएगा।\n"${member.name}" and all their data will be deleted.`,
+      [
+        { text: 'Cancel / रद्द', style: 'cancel' },
+        {
+          text: 'Delete / हटाएं',
+          style: 'destructive',
+          onPress: () =>
+            Alert.alert(
+              'Are you sure? / पक्का?',
+              'This cannot be undone. / यह वापस नहीं होगा।',
+              [
+                { text: 'No / नहीं', style: 'cancel' },
+                {
+                  text: 'Yes, delete / हाँ, हटाएं',
+                  style: 'destructive',
+                  onPress: async () => {
+                    await deleteMember(membercode);
+                    navigation.goBack();
+                  },
+                },
+              ]
+            ),
+        },
+      ]
+    );
+  };
 
   return (
     <ScrollView style={styles.wrap} contentContainerStyle={{ padding: 16 }}>
@@ -47,6 +81,11 @@ export default function MemberDetailScreen({ route, navigation }: any) {
         {membercode !== 0 && (
           <TouchableOpacity style={[styles.action, styles.editAction]} onPress={() => navigation.navigate('MemberForm', { editCode: membercode })}>
             <Text style={styles.actionIcon}>✏️</Text><Text style={styles.actionText}>Edit</Text>
+          </TouchableOpacity>
+        )}
+        {membercode !== 0 && (
+          <TouchableOpacity style={[styles.action, styles.deleteAction]} onPress={onDelete}>
+            <Text style={styles.actionIcon}>🗑️</Text><Text style={styles.actionText}>Delete</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -86,8 +125,9 @@ const styles = StyleSheet.create({
   action: { flex: 1, borderRadius: 14, paddingVertical: 18, alignItems: 'center' },
   payAction: { backgroundColor: '#2a6fdb' },
   editAction: { backgroundColor: '#e0821b' },
+  deleteAction: { backgroundColor: '#c0392b' },
   actionIcon: { fontSize: 26 },
-  actionText: { color: '#fff', fontWeight: '800', fontSize: 16, marginTop: 4 },
+  actionText: { color: '#fff', fontWeight: '800', fontSize: 14, marginTop: 4, textAlign: 'center' },
   section: { fontWeight: '800', color: '#0d1b2a', marginTop: 24, marginBottom: 8, fontSize: 15 },
   none: { color: '#8a97a6', fontStyle: 'italic' },
   histRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 10, padding: 12, marginBottom: 6 },

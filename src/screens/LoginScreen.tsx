@@ -13,9 +13,10 @@ export default function LoginScreen() {
   const [busy, setBusy] = useState(false);
 
   const submit = async () => {
-    if (!mobile || !password) return Alert.alert('Missing', 'Enter mobile number and password');
-    if (mobile.length !== 10) return Alert.alert('Invalid', 'Enter a 10-digit mobile number');
-    
+    if (!mobile || !password) return Alert.alert('Missing / खाली', 'Mobile number and password required.\nमोबाइल नंबर और पासवर्ड डालें।');
+    if (mobile.length !== 10) return Alert.alert('Invalid / गलत', 'Enter a 10-digit mobile number.\n10 अंकों का मोबाइल नंबर डालें।');
+    if (mode === 'up' && password.length < 6) return Alert.alert('Weak password / कमज़ोर पासवर्ड', 'Password must be at least 6 characters.\nपासवर्ड कम से कम 6 अक्षर का होना चाहिए।');
+
     setBusy(true);
     const email = `${mobile}@milkapp.local`;
 
@@ -23,13 +24,26 @@ export default function LoginScreen() {
       if (mode === 'in') {
         await signIn(email, password);
       } else {
-        if (!fullName.trim()) return Alert.alert('Missing', 'Enter your full name to register');
+        if (!fullName.trim()) return Alert.alert('Missing / खाली', 'Enter your dairy name.\nडेयरी का नाम डालें।');
         await signUp(email, password, fullName.trim());
-        Alert.alert('Account Created', 'You can now sign in.');
+        Alert.alert('Account Created ✅', 'Your dairy account is ready. You can now sign in.\nआपका खाता बन गया। अब लॉगिन करें।');
         setMode('in');
       }
     } catch (e: any) {
-      Alert.alert('Error', e.message ?? String(e));
+      const msg: string = e?.message ?? String(e);
+      // Map Supabase errors to plain language
+      if (msg.includes('Invalid login credentials') || msg.includes('invalid_credentials')) {
+        Alert.alert('Wrong password / गलत पासवर्ड', 'Mobile number or password is wrong.\nमोबाइल नंबर या पासवर्ड गलत है।');
+      } else if (msg.includes('Email rate limit') || msg.includes('rate limit')) {
+        Alert.alert('Too many tries / बहुत बार कोशिश', 'Please wait 1 minute and try again.\nएक मिनट रुकें और दोबारा करें।');
+      } else if (msg.includes('already registered') || msg.includes('already been registered')) {
+        Alert.alert('Already registered / पहले से खाता है', 'This mobile number already has an account. Please sign in.\nयह नंबर पहले से रजिस्टर है। लॉगिन करें।');
+        setMode('in');
+      } else if (msg.includes('Network') || msg.includes('fetch')) {
+        Alert.alert('No internet / इंटरनेट नहीं', 'Check your internet connection and try again.\nइंटरनेट चेक करें और दोबारा करें।');
+      } else {
+        Alert.alert('Error', msg);
+      }
     } finally {
       setBusy(false);
     }
