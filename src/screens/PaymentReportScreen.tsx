@@ -6,6 +6,7 @@ import {
 import { getMemberByCode, farmerPeriodReport, FarmerPeriodData, insertPayout } from '../lib/db';
 import { getSettings } from '../lib/settings';
 import { exportPaymentReportPdf } from '../lib/print';
+import DatePickerInput from '../components/DatePickerInput';
 
 const ymd = (d: Date) => d.toISOString().slice(0, 10);
 
@@ -116,12 +117,11 @@ export default function PaymentReportScreen() {
         {/* Date range */}
         <View style={styles.dateRow}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.label}>From</Text>
-            <TextInput style={styles.dateInput} value={from} onChangeText={(v) => { setFrom(v); setReport(null); }} placeholder="YYYY-MM-DD" placeholderTextColor="#bcc" />
+            <DatePickerInput label="From" value={from} onChange={(v) => { setFrom(v); setReport(null); }} />
           </View>
+          <View style={{ width: 12 }} />
           <View style={{ flex: 1 }}>
-            <Text style={styles.label}>To</Text>
-            <TextInput style={styles.dateInput} value={to} onChangeText={(v) => { setTo(v); setReport(null); }} placeholder="YYYY-MM-DD" placeholderTextColor="#bcc" />
+            <DatePickerInput label="To" value={to} onChange={(v) => { setTo(v); setReport(null); }} />
           </View>
         </View>
 

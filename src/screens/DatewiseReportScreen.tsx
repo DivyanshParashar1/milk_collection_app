@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { datewiseSummary, DatewiseRow } from '../lib/db';
 import { getSettings } from '../lib/settings';
 import { exportDatewiseReportPdf } from '../lib/print';
+import DatePickerInput from '../components/DatePickerInput';
 
 const ymd = (d: Date) => d.toISOString().slice(0, 10);
 
@@ -46,12 +47,11 @@ export default function DatewiseReportScreen() {
     <ScrollView style={styles.wrap} contentContainerStyle={{ padding: 16 }}>
       <View style={styles.dateRow}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.label}>From</Text>
-          <TextInput style={styles.dateInput} value={from} onChangeText={setFrom} placeholder="YYYY-MM-DD" placeholderTextColor="#bcc" />
+          <DatePickerInput label="From" value={from} onChange={setFrom} />
         </View>
+        <View style={{ width: 12 }} />
         <View style={{ flex: 1 }}>
-          <Text style={styles.label}>To</Text>
-          <TextInput style={styles.dateInput} value={to} onChangeText={setTo} placeholder="YYYY-MM-DD" placeholderTextColor="#bcc" />
+          <DatePickerInput label="To" value={to} onChange={setTo} />
         </View>
       </View>
 

@@ -7,6 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { getRateChart, setRateChart } from './src/lib/db';
+import ErrorBoundary from './src/components/ErrorBoundary';
 import LoginScreen from './src/screens/LoginScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import MemberFormScreen from './src/screens/MemberFormScreen';
@@ -109,14 +110,16 @@ function Root() {
 export default function App() {
   useEffect(() => { seedRateChart().catch(() => {}); }, []);
   return (
-    <SafeAreaProvider>
-      <AuthProvider>
-        <NavigationContainer>
-          <StatusBar style="light" />
-          <Root />
-        </NavigationContainer>
-      </AuthProvider>
-    </SafeAreaProvider>
+    <ErrorBoundary>
+      <SafeAreaProvider>
+        <AuthProvider>
+          <NavigationContainer>
+            <StatusBar style="light" />
+            <Root />
+          </NavigationContainer>
+        </AuthProvider>
+      </SafeAreaProvider>
+    </ErrorBoundary>
   );
 }
 
