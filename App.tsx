@@ -1,20 +1,85 @@
+import React, { useEffect } from 'react';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+
+import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { getRateChart, setRateChart } from './src/lib/db';
+import LoginScreen from './src/screens/LoginScreen';
+import HomeScreen from './src/screens/HomeScreen';
+import MemberFormScreen from './src/screens/MemberFormScreen';
+import MembersListScreen from './src/screens/MembersListScreen';
+import MemberDetailScreen from './src/screens/MemberDetailScreen';
+import MilkCollectionScreen from './src/screens/MilkCollectionScreen';
+import CollectionHistoryScreen from './src/screens/CollectionHistoryScreen';
+import CollectionEditScreen from './src/screens/CollectionEditScreen';
+import PayoutScreen from './src/screens/PayoutScreen';
+import RateChartScreen from './src/screens/RateChartScreen';
+import ReportsScreen from './src/screens/ReportsScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
+import SubscriptionScreen from './src/screens/SubscriptionScreen';
+
+const Stack = createNativeStackNavigator();
+const green = '#1b9c66';
+
+// Seed a starter fat→rate chart on first run so the calculator works immediately.
+// (Later this comes from the "Rate chart" screen / server sync.)
+async function seedRateChart() {
+  const existing = await getRateChart();
+  if (existing.length > 0) return;
+  const entries: { fat: number; rate: number }[] = [];
+  for (let fat = 3.0; fat <= 9.0 + 1e-9; fat += 0.1) {
+    const f = Math.round(fat * 10) / 10;
+    entries.push({ fat: f, rate: Math.round(f * 8 * 100) / 100 }); // ~₹8 per fat point
+  }
+  await setRateChart(entries);
+}
+
+function Root() {
+  const { session, loading } = useAuth();
+  if (loading) {
+    return <View style={styles.center}><ActivityIndicator size="large" color={green} /></View>;
+  }
+  return (
+    <Stack.Navigator screenOptions={{ headerStyle: { backgroundColor: green }, headerTintColor: '#fff', headerTitleStyle: { fontWeight: '800' } }}>
+      {!session ? (
+        <Stack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
+      ) : (
+        <>
+          <Stack.Screen name="Home" component={HomeScreen} options={{ title: '🥛 MilkApp' }} />
+          <Stack.Screen name="MilkCollection" component={MilkCollectionScreen} options={{ title: 'Milk Collection · दूध' }} />
+          <Stack.Screen name="CollectionHistory" component={CollectionHistoryScreen} options={{ title: 'Entries · edit' }} />
+          <Stack.Screen name="CollectionEdit" component={CollectionEditScreen} options={{ title: 'Edit entry' }} />
+          <Stack.Screen name="Payout" component={PayoutScreen} options={{ title: 'Pay Farmer · भुगतान' }} />
+          <Stack.Screen name="MembersList" component={MembersListScreen} options={{ title: 'Farmers · किसान' }} />
+          <Stack.Screen name="MemberDetail" component={MemberDetailScreen} options={{ title: 'Farmer' }} />
+          <Stack.Screen name="MemberForm" component={MemberFormScreen} options={{ title: 'Add Farmer · किसान' }} />
+          <Stack.Screen name="RateChart" component={RateChartScreen} options={{ title: 'Rate Chart · रेट' }} />
+          <Stack.Screen name="Reports" component={ReportsScreen} options={{ title: 'Reports · रिपोर्ट' }} />
+          <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings · सेटिंग' }} />
+          <Stack.Screen name="Subscription" component={SubscriptionScreen} options={{ title: 'Subscription' }} />
+        </>
+      )}
+    </Stack.Navigator>
+  );
+}
 
 export default function App() {
+  useEffect(() => { seedRateChart().catch(() => {}); }, []);
   return (
-    <View style={styles.container}>
-      <Text>Open up App.tsx to start working on your app!</Text>
-      <StatusBar style="auto" />
-    </View>
+    <SafeAreaProvider>
+      <AuthProvider>
+        <NavigationContainer>
+          <StatusBar style="light" />
+          <Root />
+        </NavigationContainer>
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0d1b2a' },
 });
