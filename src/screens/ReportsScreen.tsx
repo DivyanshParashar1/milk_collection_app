@@ -117,6 +117,10 @@ export default function ReportsScreen({ navigation }: any) {
         <Text style={styles.shareText}>📅  Datewise detail report</Text>
       </TouchableOpacity>
 
+      <TouchableOpacity style={[styles.shareBtn, { backgroundColor: '#6c5ce7' }]} onPress={() => navigation.navigate('PaymentReport')}>
+        <Text style={styles.shareText}>💳  Payment report (farmer bill)</Text>
+      </TouchableOpacity>
+
       {/* per-farmer breakdown */}
       <Text style={styles.section}>By farmer ({farmers.length})</Text>
       {farmers.length === 0 ? (

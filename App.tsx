@@ -26,6 +26,8 @@ import LocalSalesScreen from './src/screens/LocalSalesScreen';
 import LocalSaleRateScreen from './src/screens/LocalSaleRateScreen';
 import KapatScreen from './src/screens/KapatScreen';
 import DatewiseReportScreen from './src/screens/DatewiseReportScreen';
+import UnionSaleScreen from './src/screens/UnionSaleScreen';
+import PaymentReportScreen from './src/screens/PaymentReportScreen';
 
 const Stack = createNativeStackNavigator();
 const green = '#1b9c66';
@@ -72,6 +74,8 @@ function Root() {
           <Stack.Screen name="LocalSaleRate" component={LocalSaleRateScreen} options={{ title: 'Sale Rates · दर' }} />
           <Stack.Screen name="Kapat" component={KapatScreen} options={{ title: 'Deductions · कपात' }} />
           <Stack.Screen name="DatewiseReport" component={DatewiseReportScreen} options={{ title: 'Datewise · तारीखवार' }} />
+          <Stack.Screen name="UnionSale" component={UnionSaleScreen} options={{ title: 'Union Sale · यूनियन' }} />
+          <Stack.Screen name="PaymentReport" component={PaymentReportScreen} options={{ title: 'Payment Report · बिल' }} />
         </>
       )}
     </Stack.Navigator>

@@ -7,10 +7,15 @@ import { computeMilk, RateEntry } from '../lib/calc';
 import { getMemberByCode, getRateChart, insertCollection, recentCollections, isSessionLocked, lockSession, unlockSession } from '../lib/db';
 import { getSettings } from '../lib/settings';
 import { printCollectionSlip } from '../lib/print';
+import { openCollectionSms, SlipData } from '../lib/sms';
+import { isThermalAvailable, printCollectionSlipBT } from '../lib/thermal';
+
+const WALK_IN = 'Walk-in';
 
 export default function MilkCollectionScreen({ navigation }: any) {
   const [code, setCode] = useState('');
   const [memberName, setMemberName] = useState<string | null>(null);
+  const [memberMobile, setMemberMobile] = useState<string | null>(null);
   const [deductionPct, setDeductionPct] = useState(0);
   const [session, setSession] = useState<0 | 1>(new Date().getHours() < 14 ? 0 : 1);
   const [weight, setWeight] = useState('');
@@ -21,15 +26,21 @@ export default function MilkCollectionScreen({ navigation }: any) {
   const [rounding, setRounding] = useState<0 | 1 | 2>(0);
   const [societyName, setSocietyName] = useState('My Dairy');
   const [autoPrint, setAutoPrint] = useState(false);
+  const [smsEnabled, setSmsEnabled] = useState(true);
+  const [btPrinter, setBtPrinter] = useState('');
   const [saving, setSaving] = useState(false);
   const [locked, setLocked] = useState(false);
   const sessionInit = useRef(false);
+
+  const isWalkIn = !code.trim() || code.trim() === '0';
 
   useEffect(() => {
     getSettings().then((st) => {
       setRounding(st.rounding);
       setSocietyName(st.societyName);
       setAutoPrint(st.autoPrintSlip);
+      setSmsEnabled(st.smsOnSave);
+      setBtPrinter(st.btPrinterAddress);
       if (!sessionInit.current) {
         setSession(new Date().getHours() < st.amCutoffHour ? 0 : 1);
         sessionInit.current = true;
@@ -39,8 +50,6 @@ export default function MilkCollectionScreen({ navigation }: any) {
 
   const loadRecent = async () => setRecent(await recentCollections(8));
 
-  // reload the rate chart (and recent list) every time the screen is focused,
-  // so edits made in the Rate Chart editor take effect immediately.
   useFocusEffect(
     useCallback(() => {
       getRateChart().then((c) => setChart(c as RateEntry[]));
@@ -53,9 +62,10 @@ export default function MilkCollectionScreen({ navigation }: any) {
   // resolve member name as the code is typed
   useEffect(() => {
     const c = parseInt(code, 10);
-    if (!c) { setMemberName(null); setDeductionPct(0); return; }
+    if (!c) { setMemberName(null); setMemberMobile(null); setDeductionPct(0); return; }
     getMemberByCode(c).then((m) => {
       setMemberName(m?.name ?? null);
+      setMemberMobile(m?.mobile1 ?? null);
       setDeductionPct(m?.fix_deduction ?? 0);
     });
   }, [code]);
@@ -75,20 +85,23 @@ export default function MilkCollectionScreen({ navigation }: any) {
     [weight, fat, snf, deductionPct, chart, rounding]
   );
 
-  const save = async () => {
-    const c = parseInt(code, 10);
-    if (!c) return Alert.alert('Missing', 'Enter a member code');
-    if (!memberName) return Alert.alert('Unknown member', `No member ${c}. Add them first.`);
+  const save = async (sendSms: boolean) => {
+    const c = isWalkIn ? 0 : parseInt(code, 10);
+    if (c !== 0 && !memberName) return Alert.alert('Unknown member', `No member ${c}. Add them first.`);
     if (!(parseFloat(weight) > 0)) return Alert.alert('Missing', 'Enter weight');
     if (calc.rate === 0) return Alert.alert('No rate', 'No rate found for this fat. Check the rate chart.');
     if (locked) return Alert.alert('Session locked 🔒', 'This session is locked. Unlock it first to add entries.');
 
     setSaving(true);
+    const today = new Date().toISOString().slice(0, 10);
+    const sessionLabel = session === 0 ? 'Morning' : 'Evening';
+    const name = isWalkIn ? WALK_IN : (memberName ?? String(c));
+
     try {
       await insertCollection({
         membercode: c,
         session,
-        collect_date: new Date().toISOString().slice(0, 10),
+        collect_date: today,
         weight: calc.weight,
         fat: calc.fat,
         snf: calc.snf,
@@ -100,17 +113,36 @@ export default function MilkCollectionScreen({ navigation }: any) {
         deduction: calc.deduction,
         pay_price: calc.payPrice,
       });
-      if (autoPrint) {
+
+      // Thermal BT print (if configured)
+      if (btPrinter && isThermalAvailable()) {
+        const r = await printCollectionSlipBT(btPrinter, {
+          societyName, date: today, session: sessionLabel,
+          memberName: name, membercode: c,
+          weight: calc.weight, fat: calc.fat, snf: calc.snf || undefined, rate: calc.rate, amount: calc.price,
+        });
+        if (r.error) Alert.alert('Print error', r.error);
+      } else if (autoPrint) {
+        // OS print dialog fallback
         await printCollectionSlip({
-          society: societyName,
-          date: new Date().toISOString().slice(0, 10),
-          session: session === 0 ? 'Morning' : 'Evening',
-          code: c, name: memberName ?? String(c),
+          society: societyName, date: today, session: sessionLabel,
+          code: c, name,
           weight: calc.weight, fat: calc.fat, snf: calc.snf, rate: calc.rate, amount: calc.price,
         });
       }
+
+      // SMS (only for registered farmers with mobile)
+      if (sendSms && !isWalkIn && memberMobile) {
+        const smsData: SlipData = {
+          societyName, date: today, session: sessionLabel,
+          memberName: name, membercode: c,
+          weight: calc.weight, fat: calc.fat, snf: calc.snf || undefined, rate: calc.rate, amount: calc.price,
+        };
+        await openCollectionSms(memberMobile, smsData);
+      }
+
       // reset for next farmer, keep session
-      setCode(''); setWeight(''); setFat(''); setSnf(''); setMemberName(null);
+      setCode(''); setWeight(''); setFat(''); setSnf(''); setMemberName(null); setMemberMobile(null);
       await loadRecent();
     } catch (e: any) {
       Alert.alert('Error', e.message ?? String(e));
@@ -118,6 +150,8 @@ export default function MilkCollectionScreen({ navigation }: any) {
       setSaving(false);
     }
   };
+
+  const canSms = !isWalkIn && !!memberMobile && smsEnabled;
 
   return (
     <ScrollView style={styles.wrap} contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
@@ -145,10 +179,10 @@ export default function MilkCollectionScreen({ navigation }: any) {
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.label}>Member code</Text>
-        <TextInput style={styles.bigInput} keyboardType="number-pad" value={code} onChangeText={setCode} placeholder="000" placeholderTextColor="#bcc" autoFocus />
+        <Text style={styles.label}>Member code (empty = Walk-in)</Text>
+        <TextInput style={styles.bigInput} keyboardType="number-pad" value={code} onChangeText={setCode} placeholder="Walk-in" placeholderTextColor="#bcc" autoFocus />
         <Text style={[styles.memberName, !memberName && code ? styles.memberMissing : null]}>
-          {code ? (memberName ?? '⚠︎ unknown member') : ' '}
+          {isWalkIn ? '🚶 Walk-in customer' : (code ? (memberName ?? '⚠︎ unknown member') : ' ')}
         </Text>
 
         <View style={styles.row}>
@@ -179,9 +213,17 @@ export default function MilkCollectionScreen({ navigation }: any) {
         </View>
       </View>
 
-      <TouchableOpacity style={styles.btn} onPress={save} disabled={saving}>
-        {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Save & next</Text>}
-      </TouchableOpacity>
+      {/* Action buttons */}
+      <View style={styles.actionRow}>
+        {canSms ? (
+          <TouchableOpacity style={[styles.btn, styles.btnSms]} onPress={() => save(true)} disabled={saving}>
+            {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>📱 Save & Send</Text>}
+          </TouchableOpacity>
+        ) : null}
+        <TouchableOpacity style={[styles.btn, canSms ? styles.btnSave : styles.btnSaveFull]} onPress={() => save(false)} disabled={saving}>
+          {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>{isWalkIn ? '🧾 Save & Print' : '💾 Save'}</Text>}
+        </TouchableOpacity>
+      </View>
 
       {recent.length > 0 && (
         <>
@@ -193,7 +235,7 @@ export default function MilkCollectionScreen({ navigation }: any) {
           </View>
           {recent.map((r) => (
             <TouchableOpacity key={r.local_id} style={styles.recentRow} onPress={() => navigation.navigate('CollectionEdit', { localId: r.local_id })}>
-              <Text style={styles.recentCode}>#{r.membercode}</Text>
+              <Text style={styles.recentCode}>{r.membercode === 0 ? '🚶' : `#${r.membercode}`}</Text>
               <Text style={styles.recentMid}>{r.weight}L · {r.fat}%</Text>
               <Text style={styles.recentAmt}>₹{Number(r.price).toFixed(0)}</Text>
               <Text style={r.synced ? styles.dotOk : styles.dotPending}>●</Text>
@@ -241,7 +283,11 @@ const styles = StyleSheet.create({
   mini: { alignItems: 'center', flex: 1 },
   miniValue: { color: '#fff', fontWeight: '700', fontSize: 15 },
   miniLabel: { color: '#67788a', fontSize: 11, marginTop: 2 },
-  btn: { backgroundColor: '#1b9c66', padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 16 },
+  actionRow: { flexDirection: 'row', gap: 10, marginTop: 16 },
+  btn: { padding: 16, borderRadius: 12, alignItems: 'center' },
+  btnSms: { flex: 1.2, backgroundColor: '#2a6fdb' },
+  btnSave: { flex: 0.8, backgroundColor: '#1b9c66' },
+  btnSaveFull: { flex: 1, backgroundColor: '#1b9c66' },
   btnText: { color: '#fff', fontWeight: '800', fontSize: 17 },
   recentHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 24, marginBottom: 8 },
   recentTitle: { fontWeight: '800', color: '#0d1b2a', fontSize: 15 },

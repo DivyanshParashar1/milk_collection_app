@@ -34,15 +34,21 @@ export default function MemberDetailScreen({ route, navigation }: any) {
       </View>
 
       <View style={styles.actionRow}>
-        <TouchableOpacity style={[styles.action, styles.payAction]} onPress={() => navigation.navigate('Payout', { membercode })}>
-          <Text style={styles.actionIcon}>💰</Text><Text style={styles.actionText}>Pay</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.action, { backgroundColor: '#6c5ce7' }]} onPress={() => navigation.navigate('MemberPassbook', { membercode })}>
-          <Text style={styles.actionIcon}>📒</Text><Text style={styles.actionText}>Passbook</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.action, styles.editAction]} onPress={() => navigation.navigate('MemberForm', { editCode: membercode })}>
-          <Text style={styles.actionIcon}>✏️</Text><Text style={styles.actionText}>Edit</Text>
-        </TouchableOpacity>
+        {membercode !== 0 && (
+          <TouchableOpacity style={[styles.action, styles.payAction]} onPress={() => navigation.navigate('Payout', { membercode })}>
+            <Text style={styles.actionIcon}>💰</Text><Text style={styles.actionText}>Pay</Text>
+          </TouchableOpacity>
+        )}
+        {membercode !== 0 && (
+          <TouchableOpacity style={[styles.action, { backgroundColor: '#6c5ce7' }]} onPress={() => navigation.navigate('MemberPassbook', { membercode })}>
+            <Text style={styles.actionIcon}>📒</Text><Text style={styles.actionText}>Passbook</Text>
+          </TouchableOpacity>
+        )}
+        {membercode !== 0 && (
+          <TouchableOpacity style={[styles.action, styles.editAction]} onPress={() => navigation.navigate('MemberForm', { editCode: membercode })}>
+            <Text style={styles.actionIcon}>✏️</Text><Text style={styles.actionText}>Edit</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <Text style={styles.section}>Recent milk</Text>

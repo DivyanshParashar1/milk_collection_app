@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator, Switch } from 'react-native';
 import { getSettings, saveSettings, AppSettings, DEFAULT_SETTINGS } from '../lib/settings';
 import { backupRateChart, restoreRateChart } from '../lib/sync';
+import { isThermalAvailable, scanBluetoothPrinters, printTestPage, PrinterDevice } from '../lib/thermal';
 
 const ROUNDING = [
   { v: 0 as const, label: '2 decimals' },
@@ -12,6 +13,8 @@ const ROUNDING = [
 export default function SettingsScreen() {
   const [s, setS] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [busy, setBusy] = useState(false);
+  const [printers, setPrinters] = useState<PrinterDevice[]>([]);
+  const [scanning, setScanning] = useState(false);
 
   useEffect(() => { getSettings().then(setS); }, []);
 
@@ -81,6 +84,58 @@ export default function SettingsScreen() {
           <Text style={styles.cloudText}>⬇︎ Restore</Text>
         </TouchableOpacity>
       </View>
+
+      <View style={styles.divider} />
+      <Text style={styles.section}>SMS on save</Text>
+      <View style={styles.switchRow}>
+        <Text style={styles.switchLabel}>Open SMS after saving a collection</Text>
+        <Switch value={s.smsOnSave} onValueChange={(v) => setS({ ...s, smsOnSave: v })} trackColor={{ true: '#2a6fdb' }} />
+      </View>
+
+      <View style={styles.divider} />
+      <Text style={styles.section}>Bluetooth Thermal Printer</Text>
+      {!isThermalAvailable() ? (
+        <Text style={styles.hint}>⚠️ Thermal printer module not available. Needs a dev-client build with react-native-thermal-printer-driver.</Text>
+      ) : (
+        <>
+          <Text style={styles.hint}>Pair a BT thermal printer for auto-printing receipts on save.</Text>
+          {s.btPrinterAddress ? (
+            <View style={styles.printerCard}>
+              <Text style={styles.printerName}>🖨️ {s.btPrinterName || 'Connected'}</Text>
+              <Text style={styles.printerAddr}>{s.btPrinterAddress}</Text>
+              <View style={styles.btnRow}>
+                <TouchableOpacity style={[styles.cloudBtn, { backgroundColor: '#0d7a86' }]} onPress={async () => {
+                  const r = await printTestPage(s.btPrinterAddress);
+                  Alert.alert(r.error ? 'Print failed' : 'Test page sent ✓', r.error ?? 'Check your printer');
+                }}>
+                  <Text style={styles.cloudText}>🖨️ Test print</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.cloudBtn, { backgroundColor: '#c0392b' }]} onPress={() => setS({ ...s, btPrinterAddress: '', btPrinterName: '' })}>
+                  <Text style={styles.cloudText}>✕ Disconnect</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
+          <TouchableOpacity style={[styles.cloudBtn, { backgroundColor: '#2a6fdb', marginTop: 10 }]} onPress={async () => {
+            setScanning(true);
+            const devs = await scanBluetoothPrinters();
+            setPrinters(devs);
+            setScanning(false);
+            if (devs.length === 0) Alert.alert('No printers', 'No paired Bluetooth devices found. Pair your printer in Android settings first.');
+          }}>
+            {scanning ? <ActivityIndicator color="#fff" /> : <Text style={styles.cloudText}>🔍 Scan for printers</Text>}
+          </TouchableOpacity>
+          {printers.map((p) => (
+            <TouchableOpacity key={p.address} style={styles.printerRow} onPress={() => {
+              setS({ ...s, btPrinterAddress: p.address, btPrinterName: p.name });
+              setPrinters([]);
+            }}>
+              <Text style={styles.printerRowName}>{p.name}</Text>
+              <Text style={styles.printerRowAddr}>{p.address}</Text>
+            </TouchableOpacity>
+          ))}
+        </>
+      )}
     </ScrollView>
   );
 }
@@ -106,4 +161,10 @@ const styles = StyleSheet.create({
   backupBtn: { backgroundColor: '#2a6fdb' },
   restoreBtn: { backgroundColor: '#0d7a86' },
   cloudText: { color: '#fff', fontWeight: '800', fontSize: 15 },
+  printerCard: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginTop: 10 },
+  printerName: { fontWeight: '800', color: '#0d1b2a', fontSize: 16 },
+  printerAddr: { color: '#67788a', fontSize: 12, marginTop: 2, marginBottom: 10 },
+  printerRow: { backgroundColor: '#fff', borderRadius: 10, padding: 14, marginTop: 6, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  printerRowName: { fontWeight: '700', color: '#0d1b2a' },
+  printerRowAddr: { color: '#67788a', fontSize: 12 },
 });

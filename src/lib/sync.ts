@@ -10,17 +10,26 @@ import {
   unsyncedPayouts,
   unsyncedLedgerEntries,
   unsyncedLocalSales,
+  unsyncedUnionSales,
   markMemberSynced,
   markCollectionSynced,
   markPayoutSynced,
   markLedgerSynced,
   markLocalSaleSynced,
+  markUnionSaleSynced,
   updateCollectionLocal,
   deleteCollectionLocal,
   CollectionValues,
   getRateChart,
   setRateChart,
+  upsertMemberFromServer,
+  upsertCollectionFromServer,
+  upsertPayoutFromServer,
+  upsertLedgerFromServer,
+  upsertLocalSaleFromServer,
+  upsertUnionSaleFromServer,
 } from './db';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type SyncResult = {
   pushedMembers: number;
@@ -28,6 +37,8 @@ export type SyncResult = {
   pushedPayouts: number;
   pushedLedger: number;
   pushedLocalSales: number;
+  pushedUnionSales: number;
+  pulled: number;
   error?: string;
 };
 
@@ -44,14 +55,16 @@ async function currentSocietyId(): Promise<string | null> {
 
 export async function pushAll(): Promise<SyncResult> {
   const societyId = await currentSocietyId();
+  const empty: SyncResult = { pushedMembers: 0, pushedCollections: 0, pushedPayouts: 0, pushedLedger: 0, pushedLocalSales: 0, pushedUnionSales: 0, pulled: 0 };
   if (!societyId)
-    return { pushedMembers: 0, pushedCollections: 0, pushedPayouts: 0, pushedLedger: 0, pushedLocalSales: 0, error: 'Not signed in / no society set' };
+    return { ...empty, error: 'Not signed in / no society set' };
 
   let pushedMembers = 0;
   let pushedCollections = 0;
   let pushedPayouts = 0;
   let pushedLedger = 0;
   let pushedLocalSales = 0;
+  let pushedUnionSales = 0;
 
   // --- members ---
   const members = await unsyncedMembers();
@@ -75,7 +88,7 @@ export async function pushAll(): Promise<SyncResult> {
       )
       .select('id')
       .single();
-    if (error) return { pushedMembers, pushedCollections, pushedPayouts, pushedLedger, pushedLocalSales, error: error.message };
+    if (error) return { ...empty, pushedMembers, pushedCollections, pushedPayouts, pushedLedger, pushedLocalSales, pushedUnionSales, error: error.message };
     await markMemberSynced(m.local_id, data.id);
     pushedMembers++;
   }
@@ -104,7 +117,7 @@ export async function pushAll(): Promise<SyncResult> {
       })
       .select('id')
       .single();
-    if (error) return { pushedMembers, pushedCollections, pushedPayouts, pushedLedger, pushedLocalSales, error: error.message };
+    if (error) return { ...empty, pushedMembers, pushedCollections, pushedPayouts, pushedLedger, pushedLocalSales, pushedUnionSales, error: error.message };
     await markCollectionSynced(c.local_id, data.id);
     pushedCollections++;
   }
@@ -124,7 +137,7 @@ export async function pushAll(): Promise<SyncResult> {
       })
       .select('id')
       .single();
-    if (error) return { pushedMembers, pushedCollections, pushedPayouts, pushedLedger, pushedLocalSales, error: error.message };
+    if (error) return { ...empty, pushedMembers, pushedCollections, pushedPayouts, pushedLedger, pushedLocalSales, pushedUnionSales, error: error.message };
     await markPayoutSynced(p.local_id, data.id);
     pushedPayouts++;
   }
@@ -144,7 +157,7 @@ export async function pushAll(): Promise<SyncResult> {
       })
       .select('id')
       .single();
-    if (error) return { pushedMembers, pushedCollections, pushedPayouts, pushedLedger, pushedLocalSales, error: error.message };
+    if (error) return { ...empty, pushedMembers, pushedCollections, pushedPayouts, pushedLedger, pushedLocalSales, pushedUnionSales, error: error.message };
     await markLedgerSynced(le.local_id, data.id);
     pushedLedger++;
   }
@@ -165,12 +178,38 @@ export async function pushAll(): Promise<SyncResult> {
       })
       .select('id')
       .single();
-    if (error) return { pushedMembers, pushedCollections, pushedPayouts, pushedLedger, pushedLocalSales, error: error.message };
+    if (error) return { ...empty, pushedMembers, pushedCollections, pushedPayouts, pushedLedger, pushedLocalSales, pushedUnionSales, error: error.message };
     await markLocalSaleSynced(s.local_id, data.id);
     pushedLocalSales++;
   }
 
-  return { pushedMembers, pushedCollections, pushedPayouts, pushedLedger, pushedLocalSales };
+  // --- union sales ---
+  const uSales = await unsyncedUnionSales();
+  for (const u of uSales) {
+    const { data, error } = await supabase
+      .from('union_sales')
+      .insert({
+        society_id: societyId,
+        sale_date: u.sale_date,
+        session: u.session,
+        quantity: u.quantity,
+        fat: u.fat,
+        snf: u.snf,
+        rate: u.rate,
+        amount: u.amount,
+        kg_fat: u.kg_fat,
+        kg_snf: u.kg_snf,
+        union_name: u.union_name,
+        note: u.note,
+      })
+      .select('id')
+      .single();
+    if (error) return { ...empty, pushedMembers, pushedCollections, pushedPayouts, pushedLedger, pushedLocalSales, pushedUnionSales, error: error.message };
+    await markUnionSaleSynced(u.local_id, data.id);
+    pushedUnionSales++;
+  }
+
+  return { pushedMembers, pushedCollections, pushedPayouts, pushedLedger, pushedLocalSales, pushedUnionSales, pulled: 0 };
 }
 
 // --- Edit / delete a collection, keeping local + server consistent ---------
@@ -252,4 +291,86 @@ export async function restoreRateChart(): Promise<{ error?: string; count?: numb
   if (error) return { error: error.message };
   await setRateChart((data ?? []).map((e: any) => ({ fat: e.fat, snf: e.snf, rate: e.rate })));
   return { count: data?.length ?? 0 };
+}
+
+// ============================================================================
+// Pull sync — download rows from Supabase that we don't have locally.
+// ============================================================================
+
+const LAST_PULL_KEY = 'sync:lastPullAt';
+
+export async function pullAll(): Promise<{ pulled: number; error?: string }> {
+  const societyId = await currentSocietyId();
+  if (!societyId) return { pulled: 0, error: 'Not signed in / no society set' };
+
+  const lastPull = (await AsyncStorage.getItem(LAST_PULL_KEY)) ?? '1970-01-01T00:00:00Z';
+  let pulled = 0;
+
+  try {
+    // --- members ---
+    const { data: members, error: e1 } = await supabase
+      .from('members')
+      .select('*')
+      .eq('society_id', societyId)
+      .gt('created_at', lastPull)
+      .order('created_at');
+    if (e1) return { pulled, error: e1.message };
+    for (const m of members ?? []) { await upsertMemberFromServer(m); pulled++; }
+
+    // --- collections ---
+    const { data: cols, error: e2 } = await supabase
+      .from('milk_collections')
+      .select('*')
+      .eq('society_id', societyId)
+      .gt('created_at', lastPull)
+      .order('created_at');
+    if (e2) return { pulled, error: e2.message };
+    for (const c of cols ?? []) { await upsertCollectionFromServer(c); pulled++; }
+
+    // --- payouts ---
+    const { data: payouts, error: e3 } = await supabase
+      .from('payouts')
+      .select('*')
+      .eq('society_id', societyId)
+      .gt('created_at', lastPull)
+      .order('created_at');
+    if (e3) return { pulled, error: e3.message };
+    for (const p of payouts ?? []) { await upsertPayoutFromServer(p); pulled++; }
+
+    // --- ledger ---
+    const { data: ledger, error: e4 } = await supabase
+      .from('ledger_entries')
+      .select('*')
+      .eq('society_id', societyId)
+      .gt('created_at', lastPull)
+      .order('created_at');
+    if (e4) return { pulled, error: e4.message };
+    for (const l of ledger ?? []) { await upsertLedgerFromServer(l); pulled++; }
+
+    // --- local sales ---
+    const { data: lSales, error: e5 } = await supabase
+      .from('local_sales')
+      .select('*')
+      .eq('society_id', societyId)
+      .gt('created_at', lastPull)
+      .order('created_at');
+    if (e5) return { pulled, error: e5.message };
+    for (const s of lSales ?? []) { await upsertLocalSaleFromServer(s); pulled++; }
+
+    // --- union sales ---
+    const { data: uSales, error: e6 } = await supabase
+      .from('union_sales')
+      .select('*')
+      .eq('society_id', societyId)
+      .gt('created_at', lastPull)
+      .order('created_at');
+    if (e6) return { pulled, error: e6.message };
+    for (const u of uSales ?? []) { await upsertUnionSaleFromServer(u); pulled++; }
+
+    // update timestamp
+    await AsyncStorage.setItem(LAST_PULL_KEY, new Date().toISOString());
+    return { pulled };
+  } catch (err: any) {
+    return { pulled, error: err?.message ?? String(err) };
+  }
 }

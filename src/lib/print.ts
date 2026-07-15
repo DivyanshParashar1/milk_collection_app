@@ -246,3 +246,117 @@ export async function exportDatewiseReportPdf(d: DatewiseReportData): Promise<{ 
     return { error: String(e?.message ?? e) };
   }
 }
+
+// ---------- Payment Report (Farmer Period Bill) PDF ----------
+
+import type { FarmerPeriodData } from './db';
+
+export type PaymentReportInput = {
+  society: string;
+  memberName: string;
+  membercode: number;
+  from: string;
+  to: string;
+  data: FarmerPeriodData;
+};
+
+function paymentReportHtml(d: PaymentReportInput): string {
+  const { data } = d;
+
+  const collRows = data.collections
+    .map(
+      (c, i) =>
+        `<tr style="background:${i % 2 === 0 ? '#f8f9fa' : '#fff'}">
+          <td>${esc(c.collect_date)}</td>
+          <td>${c.session === 0 ? 'AM' : 'PM'}</td>
+          <td style="text-align:right">${c.weight}</td>
+          <td style="text-align:right">${c.fat}</td>
+          <td style="text-align:right">${Number(c.rate).toFixed(2)}</td>
+          <td style="text-align:right;font-weight:700">Rs ${Number(c.pay_price).toFixed(0)}</td>
+        </tr>`
+    )
+    .join('');
+
+  const ledgerRows = data.ledger
+    .map(
+      (l, i) =>
+        `<tr style="background:${i % 2 === 0 ? '#f8f9fa' : '#fff'}">
+          <td>${esc(l.entry_date)}</td>
+          <td>${esc(l.kind)}</td>
+          <td>${esc(l.note ?? '')}</td>
+          <td style="text-align:right;font-weight:700;color:${l.kind === 'jama' ? '#1b9c66' : '#c0392b'}">${l.kind === 'jama' ? '+' : '-'}Rs ${Number(l.amount).toFixed(0)}</td>
+        </tr>`
+    )
+    .join('');
+
+  const payoutRows = data.payouts
+    .map(
+      (p, i) =>
+        `<tr style="background:${i % 2 === 0 ? '#f8f9fa' : '#fff'}">
+          <td>${esc((p.paid_at ?? '').slice(0, 10))}</td>
+          <td>${esc(p.method)}</td>
+          <td style="text-align:right;font-weight:700;color:#c0392b">-Rs ${Number(p.amount).toFixed(0)}</td>
+        </tr>`
+    )
+    .join('');
+
+  return `<html><head><meta charset="utf-8">
+  <style>
+    body{font-family:-apple-system,Roboto,sans-serif;color:#0d1b2a;padding:16px}
+    h1{font-size:18px;margin:0}
+    .sub{color:#67788a;margin:2px 0 14px}
+    .sum{background:#f3f5f7;border-radius:10px;padding:14px;margin-bottom:16px}
+    .sr{display:flex;justify-content:space-between;padding:4px 0}
+    .sr .l{color:#4a5a6a}.sr .v{font-weight:800}
+    .net{border-top:2px solid #0d1b2a;padding-top:8px;margin-top:8px;font-size:16px}
+    .net .v{font-size:20px}
+    table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px}
+    th,td{padding:4px 6px;border-bottom:1px solid #e5e9ee;text-align:left}
+    th{background:#0d1b2a;color:#fff}
+    h3{margin:12px 0 6px;font-size:14px}
+  </style></head><body>
+    <h1>${esc(d.society)}</h1>
+    <div class="sub">Payment Report &middot; ${esc(d.memberName)} (#${d.membercode}) &middot; ${esc(d.from)} &rarr; ${esc(d.to)}</div>
+    <div class="sum">
+      <div class="sr"><span class="l">Milk earnings</span><span class="v" style="color:#1b9c66">Rs ${data.totalMilk.toFixed(0)}</span></div>
+      <div class="sr"><span class="l">Deductions (kapat)</span><span class="v" style="color:#c0392b">-Rs ${data.totalDeductions.toFixed(0)}</span></div>
+      <div class="sr"><span class="l">Jama (credit)</span><span class="v" style="color:#1b9c66">+Rs ${data.totalJama.toFixed(0)}</span></div>
+      <div class="sr"><span class="l">Udhar (debit)</span><span class="v" style="color:#c0392b">-Rs ${data.totalUdhar.toFixed(0)}</span></div>
+      <div class="sr"><span class="l">Payouts paid</span><span class="v" style="color:#c0392b">-Rs ${data.totalPayouts.toFixed(0)}</span></div>
+      <div class="sr net"><span class="l" style="font-weight:800">Net payable</span><span class="v" style="color:${data.netPayable >= 0 ? '#1b9c66' : '#c0392b'}">${data.netPayable >= 0 ? '' : '-'}Rs ${Math.abs(data.netPayable).toFixed(0)}</span></div>
+    </div>
+    <h3>Milk Collections (${data.collections.length})</h3>
+    <table><tr><th>Date</th><th>Sess</th><th style="text-align:right">L</th><th style="text-align:right">Fat%</th><th style="text-align:right">Rate</th><th style="text-align:right">Rs</th></tr>${collRows || '<tr><td colspan="6">None</td></tr>'}</table>
+    ${data.ledger.length ? `<h3>Ledger (${data.ledger.length})</h3><table><tr><th>Date</th><th>Type</th><th>Note</th><th style="text-align:right">Rs</th></tr>${ledgerRows}</table>` : ''}
+    ${data.payouts.length ? `<h3>Payouts (${data.payouts.length})</h3><table><tr><th>Date</th><th>Method</th><th style="text-align:right">Rs</th></tr>${payoutRows}</table>` : ''}
+  </body></html>`;
+}
+
+export async function exportPaymentReportPdf(d: PaymentReportInput): Promise<{ error?: string }> {
+  try {
+    if (!(await Sharing.isAvailableAsync())) {
+      return { error: 'Sharing is not available on this device.' };
+    }
+    const { uri } = await Print.printToFileAsync({ html: paymentReportHtml(d) });
+
+    let shareUri = uri;
+    if (cacheDirectory) {
+      try {
+        const dest = `${cacheDirectory}payment-${d.membercode}-${Date.now()}.pdf`;
+        await copyAsync({ from: uri, to: dest });
+        shareUri = dest;
+      } catch {
+        shareUri = uri;
+      }
+    }
+
+    await Sharing.shareAsync(shareUri, {
+      mimeType: 'application/pdf',
+      UTI: 'com.adobe.pdf',
+      dialogTitle: 'Share payment report',
+    });
+    return {};
+  } catch (e: any) {
+    return { error: String(e?.message ?? e) };
+  }
+}

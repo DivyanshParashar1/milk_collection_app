@@ -229,3 +229,26 @@ create index if not exists idx_local_sales_society on local_sales(society_id, sa
 alter table local_sales enable row level security;
 create policy "society rw" on local_sales
   for all using (society_id = current_society_id()) with check (society_id = current_society_id());
+
+-- ---------- UNION SALES (selling to milk federation) ------------------------
+create table if not exists union_sales (
+  id             uuid primary key default gen_random_uuid(),
+  society_id     uuid not null references societies(id) on delete cascade,
+  sale_date      date not null default current_date,
+  session        smallint default 0,
+  quantity       numeric not null,
+  fat            numeric default 0,
+  snf            numeric default 0,
+  rate           numeric default 0,
+  amount         numeric default 0,
+  kg_fat         numeric default 0,
+  kg_snf         numeric default 0,
+  union_name     text,
+  note           text,
+  created_at     timestamptz default now()
+);
+create index if not exists idx_union_sales_society on union_sales(society_id, sale_date);
+
+alter table union_sales enable row level security;
+create policy "society rw" on union_sales
+  for all using (society_id = current_society_id()) with check (society_id = current_society_id());

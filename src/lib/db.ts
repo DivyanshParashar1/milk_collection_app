@@ -126,11 +126,36 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
       locked       INTEGER DEFAULT 0,
       UNIQUE(collect_date, session)
     );
+
+    CREATE TABLE IF NOT EXISTS union_sales (
+      local_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+      remote_id    TEXT,
+      sale_date    TEXT NOT NULL,
+      session      INTEGER DEFAULT 0,
+      quantity     REAL NOT NULL,
+      fat          REAL DEFAULT 0,
+      snf          REAL DEFAULT 0,
+      rate         REAL DEFAULT 0,
+      amount       REAL DEFAULT 0,
+      kg_fat       REAL DEFAULT 0,
+      kg_snf       REAL DEFAULT 0,
+      union_name   TEXT,
+      note         TEXT,
+      synced       INTEGER DEFAULT 0,
+      created_at   TEXT DEFAULT (datetime('now'))
+    );
   `);
 
   // lightweight migrations for installs created before a column existed
   // (ALTER throws if the column is already there — safe to ignore)
   try { await _db.execAsync(`ALTER TABLE members ADD COLUMN upi_id TEXT`); } catch {}
+
+  // Seed "Walk-in" member (code 0) so walk-in collections have a name in reports
+  try {
+    await _db.runAsync(
+      `INSERT OR IGNORE INTO members (membercode, name, synced) VALUES (0, 'Walk-in', 1)`
+    );
+  } catch {}
 
   return _db;
 }
@@ -733,3 +758,155 @@ export async function datewiseSummary(from: string, to: string): Promise<Datewis
   );
 }
 
+// ---------- Union Sales ----------
+export type LocalUnionSale = {
+  sale_date: string;
+  session: number;
+  quantity: number;
+  fat: number;
+  snf: number;
+  rate: number;
+  amount: number;
+  kg_fat: number;
+  kg_snf: number;
+  union_name?: string;
+  note?: string;
+};
+
+export async function insertUnionSale(s: LocalUnionSale) {
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT INTO union_sales (sale_date, session, quantity, fat, snf, rate, amount, kg_fat, kg_snf, union_name, note, synced)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+    [s.sale_date, s.session, s.quantity, s.fat, s.snf, s.rate, s.amount, s.kg_fat, s.kg_snf, s.union_name ?? null, s.note ?? null]
+  );
+}
+
+export async function recentUnionSales(limit = 20): Promise<any[]> {
+  const db = await getDb();
+  return db.getAllAsync(`SELECT * FROM union_sales ORDER BY local_id DESC LIMIT ?`, [limit]);
+}
+
+export async function todayUnionSaleTotals(): Promise<{ quantity: number; amount: number; count: number }> {
+  const db = await getDb();
+  const r: any = await db.getFirstAsync(
+    `SELECT COALESCE(SUM(quantity),0) quantity, COALESCE(SUM(amount),0) amount, COUNT(*) count
+     FROM union_sales WHERE sale_date = date('now')`
+  );
+  return { quantity: r?.quantity ?? 0, amount: r?.amount ?? 0, count: r?.count ?? 0 };
+}
+
+export async function unsyncedUnionSales(): Promise<any[]> {
+  const db = await getDb();
+  return db.getAllAsync(`SELECT * FROM union_sales WHERE synced = 0`);
+}
+
+export async function markUnionSaleSynced(localId: number, remoteId: string) {
+  const db = await getDb();
+  await db.runAsync(`UPDATE union_sales SET synced = 1, remote_id = ? WHERE local_id = ?`, [remoteId, localId]);
+}
+
+// ---------- Farmer Period Report (Payment Bill) ----------
+export type FarmerPeriodData = {
+  collections: any[];
+  payouts: any[];
+  ledger: any[];
+  totalMilk: number;
+  totalDeductions: number;
+  totalPayouts: number;
+  totalJama: number;
+  totalUdhar: number;
+  netPayable: number;
+};
+
+export async function farmerPeriodReport(membercode: number, from: string, to: string): Promise<FarmerPeriodData> {
+  const db = await getDb();
+  const collections: any[] = await db.getAllAsync(
+    `SELECT * FROM milk_collections WHERE membercode = ? AND collect_date BETWEEN ? AND ? ORDER BY collect_date, session`,
+    [membercode, from, to]
+  );
+  const payouts: any[] = await db.getAllAsync(
+    `SELECT * FROM payouts WHERE membercode = ? AND date(paid_at) BETWEEN ? AND ? ORDER BY paid_at`,
+    [membercode, from, to]
+  );
+  const ledger: any[] = await db.getAllAsync(
+    `SELECT * FROM ledger_entries WHERE membercode = ? AND entry_date BETWEEN ? AND ? ORDER BY entry_date`,
+    [membercode, from, to]
+  );
+
+  const totalMilk = collections.reduce((s, c) => s + (c.pay_price ?? 0), 0);
+  const totalDeductions = collections.reduce((s, c) => s + (c.deduction ?? 0), 0);
+  const totalPayouts = payouts.reduce((s, p) => s + (p.amount ?? 0), 0);
+  const totalJama = ledger.filter(l => l.kind === 'jama').reduce((s, l) => s + l.amount, 0);
+  const totalUdhar = ledger.filter(l => l.kind === 'udhar').reduce((s, l) => s + l.amount, 0);
+  const netPayable = totalMilk + totalJama - totalPayouts - totalUdhar;
+
+  return { collections, payouts, ledger, totalMilk, totalDeductions, totalPayouts, totalJama, totalUdhar, netPayable };
+}
+
+// ---------- Upsert from server (for pull sync) ----------
+export async function upsertMemberFromServer(r: any) {
+  const db = await getDb();
+  const existing = await db.getFirstAsync(`SELECT local_id FROM members WHERE remote_id = ?`, [r.id]);
+  if (existing) return;
+  await db.runAsync(
+    `INSERT OR IGNORE INTO members (remote_id, membercode, name, name_local, mobile1, animal_type, upi_id, bank_account, ifsc_code, fix_deduction, synced)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+    [r.id, r.membercode, r.name, r.name_local, r.mobile1, r.animal_type, r.upi_id, r.bank_account, r.ifsc_code, r.fix_deduction ?? 0]
+  );
+}
+
+export async function upsertCollectionFromServer(r: any) {
+  const db = await getDb();
+  const existing = await db.getFirstAsync(`SELECT local_id FROM milk_collections WHERE remote_id = ?`, [r.id]);
+  if (existing) return;
+  await db.runAsync(
+    `INSERT INTO milk_collections (remote_id, membercode, session, collect_date, weight, fat, snf, clr, rate, price, kg_fat, kg_snf, deduction, pay_price, animal_type, synced)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+    [r.id, r.membercode, r.session, r.collect_date, r.weight, r.fat, r.snf, r.clr ?? 0, r.rate, r.price, r.kg_fat, r.kg_snf, r.deduction, r.pay_price, r.animal_type]
+  );
+}
+
+export async function upsertPayoutFromServer(r: any) {
+  const db = await getDb();
+  const existing = await db.getFirstAsync(`SELECT local_id FROM payouts WHERE remote_id = ?`, [r.id]);
+  if (existing) return;
+  await db.runAsync(
+    `INSERT INTO payouts (remote_id, membercode, amount, method, upi_ref, note, synced, paid_at)
+     VALUES (?, ?, ?, ?, ?, ?, 1, ?)`,
+    [r.id, r.membercode, r.amount, r.method, r.upi_ref, r.note, r.paid_at]
+  );
+}
+
+export async function upsertLedgerFromServer(r: any) {
+  const db = await getDb();
+  const existing = await db.getFirstAsync(`SELECT local_id FROM ledger_entries WHERE remote_id = ?`, [r.id]);
+  if (existing) return;
+  await db.runAsync(
+    `INSERT INTO ledger_entries (remote_id, membercode, amount, kind, note, entry_date, synced)
+     VALUES (?, ?, ?, ?, ?, ?, 1)`,
+    [r.id, r.membercode, r.amount, r.kind, r.note, r.entry_date]
+  );
+}
+
+export async function upsertLocalSaleFromServer(r: any) {
+  const db = await getDb();
+  const existing = await db.getFirstAsync(`SELECT local_id FROM local_sales WHERE remote_id = ?`, [r.id]);
+  if (existing) return;
+  await db.runAsync(
+    `INSERT INTO local_sales (remote_id, customer_name, quantity, rate, amount, milk_type, sale_date, synced)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+    [r.id, r.customer_name, r.quantity, r.rate, r.amount, r.milk_type, r.sale_date]
+  );
+}
+
+export async function upsertUnionSaleFromServer(r: any) {
+  const db = await getDb();
+  const existing = await db.getFirstAsync(`SELECT local_id FROM union_sales WHERE remote_id = ?`, [r.id]);
+  if (existing) return;
+  await db.runAsync(
+    `INSERT INTO union_sales (remote_id, sale_date, session, quantity, fat, snf, rate, amount, kg_fat, kg_snf, union_name, note, synced)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+    [r.id, r.sale_date, r.session, r.quantity, r.fat, r.snf, r.rate, r.amount, r.kg_fat, r.kg_snf, r.union_name, r.note]
+  );
+}

@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIn
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { todayTotals, pendingCount } from '../lib/db';
-import { pushAll } from '../lib/sync';
+import { pushAll, pullAll } from '../lib/sync';
 
 // Big, icon-first actions with Hindi labels for low-literacy users.
 const TILES: { en: string; hi: string; icon: string; route: string; color: string }[] = [
@@ -12,6 +12,7 @@ const TILES: { en: string; hi: string; icon: string; route: string; color: strin
   { en: 'Farmers', hi: 'किसान', icon: '👨‍🌾', route: 'MembersList', color: '#e0821b' },
   { en: 'Ledger', hi: 'जमा/उधार', icon: '📒', route: 'Ledger', color: '#6c5ce7' },
   { en: 'Local Sale', hi: 'स्थानीय बिक्री', icon: '🏪', route: 'LocalSales', color: '#d63031' },
+  { en: 'Union Sale', hi: 'यूनियन बिक्री', icon: '🏭', route: 'UnionSale', color: '#5f27cd' },
   { en: 'Rate Chart', hi: 'रेट चार्ट', icon: '📋', route: 'RateChart', color: '#c0392b' },
   { en: 'Deductions', hi: 'कपात', icon: '✂️', route: 'Kapat', color: '#8a3ffc' },
   { en: 'Reports', hi: 'रिपोर्ट', icon: '📊', route: 'Reports', color: '#0d7a86' },
@@ -38,8 +39,11 @@ export default function HomeScreen({ navigation }: any) {
     setSyncing(true);
     try {
       const r = await pushAll();
-      if (r.error) Alert.alert('Sync failed', r.error);
-      else Alert.alert('Synced ✓', `${r.pushedMembers} farmers · ${r.pushedCollections} collections · ${r.pushedPayouts} payouts · ${r.pushedLedger} ledger · ${r.pushedLocalSales} sales uploaded`);
+      if (r.error) { Alert.alert('Push failed', r.error); await load(); setSyncing(false); return; }
+      const p = await pullAll();
+      if (p.error) Alert.alert('Pull warning', p.error);
+      const pushed = r.pushedMembers + r.pushedCollections + r.pushedPayouts + r.pushedLedger + r.pushedLocalSales + r.pushedUnionSales;
+      Alert.alert('Synced ✓', `⬆️ ${pushed} pushed · ⬇️ ${p.pulled} pulled`);
       await load();
     } finally {
       setSyncing(false);
