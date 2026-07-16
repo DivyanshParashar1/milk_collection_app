@@ -173,21 +173,32 @@ export function isThermalAvailable(): boolean {
 
 /**
  * Android 12+ needs BLUETOOTH_CONNECT at runtime before we may even read the
- * paired-device list. Below 31 the install-time permissions cover us.
+ * paired-device list. BLUETOOTH_SCAN is also requested because some OEM
+ * firmwares need it for cancelDiscovery / bondedDevices.
+ * Below API 31 the install-time permissions cover us.
  */
 export async function ensureBluetoothPermission(): Promise<boolean> {
   if (Platform.OS !== 'android') return false;
   if (typeof Platform.Version === 'number' && Platform.Version < 31) return true;
-  const perm = PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT;
-  if (!perm) return true;
+
+  const perms = [
+    PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+    'android.permission.BLUETOOTH_SCAN' as typeof PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+  ].filter(Boolean); // filter in case a very old RN build doesn't define them
+
+  if (perms.length === 0) return true;
+
   try {
-    if (await PermissionsAndroid.check(perm)) return true;
-    const res = await PermissionsAndroid.request(perm, {
-      title: 'Allow Bluetooth',
-      message: 'Needed to send receipts to your thermal printer.',
-      buttonPositive: 'Allow',
-    });
-    return res === PermissionsAndroid.RESULTS.GRANTED;
+    // Fast path: already granted.
+    const checks = await Promise.all(perms.map((p) => PermissionsAndroid.check(p)));
+    if (checks.every(Boolean)) return true;
+
+    // Request everything we still need in a single OS dialog.
+    const results = await PermissionsAndroid.requestMultiple(
+      perms as any,
+    );
+    // BLUETOOTH_CONNECT is the hard requirement; SCAN is nice-to-have.
+    return results[PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT] === PermissionsAndroid.RESULTS.GRANTED;
   } catch {
     return false;
   }

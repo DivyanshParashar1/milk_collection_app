@@ -99,7 +99,9 @@ class ThermalPrinterModule : Module() {
       try {
         socket = device.createRfcommSocketToServiceRecord(SPP_UUID)
         // An in-flight discovery makes connect() slow and flaky.
-        a.cancelDiscovery()
+        // cancelDiscovery() needs BLUETOOTH_SCAN which we deliberately skip,
+        // so swallow the SecurityException — it's a nice-to-have, not critical.
+        try { a.cancelDiscovery() } catch (_: SecurityException) { }
         socket.connect()
         socket.outputStream.apply {
           write(payload)

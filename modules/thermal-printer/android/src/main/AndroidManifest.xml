@@ -13,4 +13,11 @@
     discovery and the location permission that would drag in.
   -->
   <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
+  <!--
+    BLUETOOTH_SCAN is only used for cancelDiscovery() before connecting.
+    neverForLocation avoids dragging in ACCESS_FINE_LOCATION.
+  -->
+  <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+                   android:usesPermissionFlags="neverForLocation" />
 </manifest>
