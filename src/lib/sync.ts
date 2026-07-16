@@ -118,8 +118,8 @@ export async function pushAll(): Promise<SyncResult> {
 
   const result: SyncResult = { ...empty };
 
-  // Members go first: collections and payouts reference membercode, so the
-  // server must know the farmer before rows pointing at them arrive.
+  // Members go first, and alone: collections and payouts reference membercode,
+  // so the server must know the farmer before rows pointing at them arrive.
   const members = await pushTable(
     'members', 'society_id,membercode', await unsyncedMembers(),
     (m) => ({
@@ -133,66 +133,68 @@ export async function pushAll(): Promise<SyncResult> {
   result.pushedMembers = members.pushed;
   if (members.error) return { ...result, error: members.error };
 
-  const cols = await pushTable(
-    'milk_collections', 'society_id,client_id', await unsyncedCollections(),
-    (c) => ({
-      client_id: c.client_id, society_id: societyId, membercode: c.membercode,
-      session: c.session, collect_date: c.collect_date, weight: c.weight,
-      fat: c.fat, snf: c.snf, clr: c.clr, rate: c.rate, price: c.price,
-      kg_fat: c.kg_fat, kg_snf: c.kg_snf, deduction: c.deduction,
-      pay_price: c.pay_price, animal_type: c.animal_type,
-    }),
-    markCollectionSynced
-  );
+  // The remaining five tables only depend on members, never on each other, so
+  // they go out together — the same fix pullAll already had. Serially they cost
+  // five round-trips, which on a rural link is most of the wait.
+  const [cols, payouts, ledger, localSales, unionSales] = await Promise.all([
+    pushTable(
+      'milk_collections', 'society_id,client_id', await unsyncedCollections(),
+      (c) => ({
+        client_id: c.client_id, society_id: societyId, membercode: c.membercode,
+        session: c.session, collect_date: c.collect_date, weight: c.weight,
+        fat: c.fat, snf: c.snf, clr: c.clr, rate: c.rate, price: c.price,
+        kg_fat: c.kg_fat, kg_snf: c.kg_snf, deduction: c.deduction,
+        pay_price: c.pay_price, animal_type: c.animal_type,
+      }),
+      markCollectionSynced
+    ),
+    pushTable(
+      'payouts', 'society_id,client_id', await unsyncedPayouts(),
+      (p) => ({
+        client_id: p.client_id, society_id: societyId, membercode: p.membercode,
+        amount: p.amount, method: p.method, upi_ref: p.upi_ref, note: p.note,
+      }),
+      markPayoutSynced
+    ),
+    pushTable(
+      'ledger_entries', 'society_id,client_id', await unsyncedLedgerEntries(),
+      (le) => ({
+        client_id: le.client_id, society_id: societyId, membercode: le.membercode,
+        amount: le.amount, kind: le.kind, note: le.note, entry_date: le.entry_date,
+      }),
+      markLedgerSynced
+    ),
+    pushTable(
+      'local_sales', 'society_id,client_id', await unsyncedLocalSales(),
+      (s) => ({
+        client_id: s.client_id, society_id: societyId, customer_name: s.customer_name,
+        quantity: s.quantity, rate: s.rate, amount: s.amount,
+        milk_type: s.milk_type, sale_date: s.sale_date,
+      }),
+      markLocalSaleSynced
+    ),
+    pushTable(
+      'union_sales', 'society_id,client_id', await unsyncedUnionSales(),
+      (u) => ({
+        client_id: u.client_id, society_id: societyId, sale_date: u.sale_date,
+        session: u.session, quantity: u.quantity, fat: u.fat, snf: u.snf,
+        rate: u.rate, amount: u.amount, kg_fat: u.kg_fat, kg_snf: u.kg_snf,
+        union_name: u.union_name, note: u.note,
+      }),
+      markUnionSaleSynced
+    ),
+  ]);
+
   result.pushedCollections = cols.pushed;
-  if (cols.error) return { ...result, error: cols.error };
-
-  const payouts = await pushTable(
-    'payouts', 'society_id,client_id', await unsyncedPayouts(),
-    (p) => ({
-      client_id: p.client_id, society_id: societyId, membercode: p.membercode,
-      amount: p.amount, method: p.method, upi_ref: p.upi_ref, note: p.note,
-    }),
-    markPayoutSynced
-  );
   result.pushedPayouts = payouts.pushed;
-  if (payouts.error) return { ...result, error: payouts.error };
-
-  const ledger = await pushTable(
-    'ledger_entries', 'society_id,client_id', await unsyncedLedgerEntries(),
-    (le) => ({
-      client_id: le.client_id, society_id: societyId, membercode: le.membercode,
-      amount: le.amount, kind: le.kind, note: le.note, entry_date: le.entry_date,
-    }),
-    markLedgerSynced
-  );
   result.pushedLedger = ledger.pushed;
-  if (ledger.error) return { ...result, error: ledger.error };
-
-  const localSales = await pushTable(
-    'local_sales', 'society_id,client_id', await unsyncedLocalSales(),
-    (s) => ({
-      client_id: s.client_id, society_id: societyId, customer_name: s.customer_name,
-      quantity: s.quantity, rate: s.rate, amount: s.amount,
-      milk_type: s.milk_type, sale_date: s.sale_date,
-    }),
-    markLocalSaleSynced
-  );
   result.pushedLocalSales = localSales.pushed;
-  if (localSales.error) return { ...result, error: localSales.error };
-
-  const unionSales = await pushTable(
-    'union_sales', 'society_id,client_id', await unsyncedUnionSales(),
-    (u) => ({
-      client_id: u.client_id, society_id: societyId, sale_date: u.sale_date,
-      session: u.session, quantity: u.quantity, fat: u.fat, snf: u.snf,
-      rate: u.rate, amount: u.amount, kg_fat: u.kg_fat, kg_snf: u.kg_snf,
-      union_name: u.union_name, note: u.note,
-    }),
-    markUnionSaleSynced
-  );
   result.pushedUnionSales = unionSales.pushed;
-  if (unionSales.error) return { ...result, error: unionSales.error };
+
+  // Rows that did push stay marked synced; report the first failure so the next
+  // run retries only what's still dirty.
+  const failed = [cols, payouts, ledger, localSales, unionSales].find((r) => r.error);
+  if (failed?.error) return { ...result, error: failed.error };
 
   return result;
 }
@@ -291,16 +293,25 @@ export async function pullAll(): Promise<{ pulled: number; error?: string }> {
   const lastPull = (await AsyncStorage.getItem(LAST_PULL_KEY)) ?? '1970-01-01T00:00:00Z';
 
   try {
+    // Every table is paged on `updated_at`, never `created_at`: payouts has no
+    // created_at column (its timestamp is paid_at), so asking for one made
+    // PostgREST reject that query — and since one failure fails the whole pull,
+    // pullAll returned 0 rows on every run. updated_at exists on all six
+    // (migration v5/v6) and is the only column that also reflects edits.
+    //
     // All seven queries go out together. They are independent, so paying for
     // seven serial round-trips on a rural connection was most of the wait.
+    const since = (table: string) =>
+      supabase.from(table).select('*').eq('society_id', societyId).gt('updated_at', lastPull).order('updated_at');
+
     const [soc, members, cols, payouts, ledger, lSales, uSales] = await Promise.all([
       supabase.from('societies').select('subscription_end_date, is_active').eq('id', societyId).single(),
-      supabase.from('members').select('*').eq('society_id', societyId).gt('updated_at', lastPull).order('updated_at'),
-      supabase.from('milk_collections').select('*').eq('society_id', societyId).gt('created_at', lastPull).order('created_at'),
-      supabase.from('payouts').select('*').eq('society_id', societyId).gt('created_at', lastPull).order('created_at'),
-      supabase.from('ledger_entries').select('*').eq('society_id', societyId).gt('created_at', lastPull).order('created_at'),
-      supabase.from('local_sales').select('*').eq('society_id', societyId).gt('created_at', lastPull).order('created_at'),
-      supabase.from('union_sales').select('*').eq('society_id', societyId).gt('created_at', lastPull).order('created_at'),
+      since('members'),
+      since('milk_collections'),
+      since('payouts'),
+      since('ledger_entries'),
+      since('local_sales'),
+      since('union_sales'),
     ]);
 
     const failed = [members, cols, payouts, ledger, lSales, uSales].find((r) => r.error);
@@ -310,7 +321,14 @@ export async function pullAll(): Promise<{ pulled: number; error?: string }> {
     // this is how a renewal reaches a locked device.
     if (soc.data) {
       const s = await getSettings();
-      await saveSettings({ ...s, subscriptionEnd: soc.data.subscription_end_date, isActive: soc.data.is_active });
+      // A never-subscribed society has a null end date (migration v8 — no trial).
+      // Coerce to '' so settings stays the string it is typed as; computeLocked
+      // reads both as "no subscription" and locks.
+      await saveSettings({
+        ...s,
+        subscriptionEnd: soc.data.subscription_end_date ?? '',
+        isActive: soc.data.is_active,
+      });
       await refreshLock();
     }
 
