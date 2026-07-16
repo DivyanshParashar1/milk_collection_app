@@ -11,6 +11,7 @@ import { getSettings } from '../lib/settings';
 import { printCollectionSlip } from '../lib/print';
 import { openCollectionSms, SlipData } from '../lib/sms';
 import { isThermalAvailable, printCollectionSlipBT } from '../lib/thermal';
+import { useSubscription } from '../context/SubscriptionContext';
 
 const WALK_IN = 'Walk-in';
 type AnimalType = 'mix' | 'cow' | 'buff';
@@ -21,6 +22,7 @@ const ANIMAL_TABS: { type: AnimalType; emoji: string; label: string; color: stri
 ];
 
 export default function MilkCollectionScreen({ route, navigation }: any) {
+  const { guard } = useSubscription();
   const [code, setCode] = useState(route.params?.prefillCode ? String(route.params.prefillCode) : '');
   const [memberName, setMemberName] = useState<string | null>(null);
   const [memberMobile, setMemberMobile] = useState<string | null>(null);
@@ -37,8 +39,8 @@ export default function MilkCollectionScreen({ route, navigation }: any) {
   const [autoPrint, setAutoPrint] = useState(false);
   const [smsEnabled, setSmsEnabled] = useState(true);
   const [btPrinter, setBtPrinter] = useState('');
-  const [subExpired, setSubExpired] = useState(false);
   const [saving, setSaving] = useState(false);
+  // `locked` here is the per-session lock (AM/PM), not the subscription lock.
   const [locked, setLocked] = useState(false);
   const sessionInit = useRef(false);
 
@@ -54,12 +56,6 @@ export default function MilkCollectionScreen({ route, navigation }: any) {
       if (!sessionInit.current) {
         setSession(new Date().getHours() < st.amCutoffHour ? 0 : 1);
         sessionInit.current = true;
-      }
-      // Check subscription
-      if (st.isActive === false) { setSubExpired(true); return; }
-      if (st.subscriptionEnd) {
-        const daysExpired = (Date.now() - new Date(st.subscriptionEnd).getTime()) / (1000 * 3600 * 24);
-        setSubExpired(daysExpired > 0);
       }
     });
   }, []);
@@ -109,10 +105,7 @@ export default function MilkCollectionScreen({ route, navigation }: any) {
     if (!(parseFloat(weight) > 0)) return Alert.alert('Missing', 'Enter weight');
     if (calc.rate === 0) return Alert.alert('No rate', 'No rate found for this fat. Check the rate chart.');
     if (locked) return Alert.alert('Session locked 🔒', 'This session is locked. Unlock it first to add entries.');
-    if (subExpired) return Alert.alert('Subscription Expired 🔒', 'Renew your subscription to add entries.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'View plans', onPress: () => navigation.navigate('Subscription') },
-    ]);
+    if (!guard()) return;
 
     setSaving(true);
     const today = new Date().toISOString().slice(0, 10);
@@ -212,6 +205,7 @@ export default function MilkCollectionScreen({ route, navigation }: any) {
         <TouchableOpacity
           style={[styles.lockBtn, locked ? styles.lockBtnLocked : styles.lockBtnOpen]}
           onPress={async () => {
+            if (!guard()) return;
             const today = new Date().toISOString().slice(0, 10);
             if (locked) { await unlockSession(today, session); setLocked(false); }
             else {

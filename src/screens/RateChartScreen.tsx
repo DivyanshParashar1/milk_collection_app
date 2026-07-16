@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityInd
 import KeyboardAwareScreen from "../components/KeyboardAwareScreen";
 import { getRateChart, setRateChart } from '../lib/db';
 import { linearRateChart } from '../lib/calc';
+import { useSubscription } from '../context/SubscriptionContext';
 
 type AnimalType = 'mix' | 'cow' | 'buff';
 type Row = { fat: string; rate: string };
@@ -14,6 +15,7 @@ const ANIMALS: { type: AnimalType; label: string; emoji: string; color: string }
 ];
 
 export default function RateChartScreen({ navigation }: any) {
+  const { guard } = useSubscription();
   const [animalType, setAnimalType] = useState<AnimalType>('mix');
   const [mode, setMode] = useState<'simple' | 'table'>('simple');
   const [perPoint, setPerPoint] = useState('8');
@@ -41,6 +43,7 @@ export default function RateChartScreen({ navigation }: any) {
   const animalInfo = ANIMALS.find((a) => a.type === animalType)!;
 
   const saveSimple = async () => {
+    if (!guard()) return;
     const p = parseFloat(perPoint);
     if (!(p > 0)) return Alert.alert('Enter a number', 'Rate per fat point, e.g. 8');
     setSaving(true);
@@ -53,6 +56,7 @@ export default function RateChartScreen({ navigation }: any) {
   };
 
   const saveTable = async () => {
+    if (!guard()) return;
     const entries = rows
       .map((r) => ({ fat: parseFloat(r.fat), rate: parseFloat(r.rate) }))
       .filter((e) => isFinite(e.fat) && e.fat > 0 && isFinite(e.rate) && e.rate >= 0)

@@ -2,8 +2,10 @@ import React, { useCallback, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { getMemberByCode, farmerBalance, memberCollections, memberPayouts, deleteMember } from '../lib/db';
+import { useSubscription } from '../context/SubscriptionContext';
 
 export default function MemberDetailScreen({ route, navigation }: any) {
+  const { guard } = useSubscription();
   const membercode: number = route.params.membercode;
   const [member, setMember] = useState<any | null>(null);
   const [balance, setBalance] = useState(0);
@@ -28,6 +30,7 @@ export default function MemberDetailScreen({ route, navigation }: any) {
   );
 
   const onDelete = () => {
+    if (!guard()) return;
     Alert.alert(
       'Delete farmer? / किसान हटाएं?',
       `"${member.name}" और उनका सारा डेटा हट जाएगा।\n"${member.name}" and all their data will be deleted.`,

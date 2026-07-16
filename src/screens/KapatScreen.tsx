@@ -3,11 +3,13 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityInd
 import KeyboardAwareScreen from "../components/KeyboardAwareScreen";
 import { useFocusEffect } from '@react-navigation/native';
 import { insertKapatItem, updateKapatItem, deleteKapatItem, listKapatItems, LocalKapatItem } from '../lib/db';
+import { useSubscription } from '../context/SubscriptionContext';
 
 type EditState = { localId?: number; name: string; type: 'percent' | 'fixed'; value: string };
 const EMPTY: EditState = { name: '', type: 'percent', value: '' };
 
 export default function KapatScreen() {
+  const { guard } = useSubscription();
   const [items, setItems] = useState<any[]>([]);
   const [form, setForm] = useState<EditState>(EMPTY);
   const [saving, setSaving] = useState(false);
@@ -16,6 +18,7 @@ export default function KapatScreen() {
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const save = async () => {
+    if (!guard()) return;
     if (!form.name.trim()) return Alert.alert('Missing', 'Enter a deduction name');
     const val = parseFloat(form.value);
     if (!val || val <= 0) return Alert.alert('Missing', 'Enter a value > 0');
@@ -38,6 +41,7 @@ export default function KapatScreen() {
   };
 
   const del = (id: number, name: string) => {
+    if (!guard()) return;
     Alert.alert('Delete?', `Remove "${name}" deduction?`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => { await deleteKapatItem(id); await load(); } },

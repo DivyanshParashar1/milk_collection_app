@@ -7,6 +7,7 @@ import { getMemberByCode, farmerPeriodReport, FarmerPeriodData, insertPayout } f
 import { getSettings } from '../lib/settings';
 import { exportPaymentReportPdf } from '../lib/print';
 import DatePickerInput from '../components/DatePickerInput';
+import { useSubscription } from '../context/SubscriptionContext';
 
 const ymd = (d: Date) => d.toISOString().slice(0, 10);
 
@@ -24,6 +25,7 @@ function cycleDates(days: number) {
 }
 
 export default function PaymentReportScreen() {
+  const { guard } = useSubscription();
   const today = ymd(new Date());
   const monthAgo = ymd(new Date(Date.now() - 29 * 86400000));
   const [code, setCode] = useState('');
@@ -68,6 +70,7 @@ export default function PaymentReportScreen() {
   };
 
   const payNow = () => {
+    if (!guard()) return;
     if (!report || !report.netPayable || report.netPayable <= 0) {
       return Alert.alert('Nothing due', 'Net payable is ₹0 or negative.');
     }

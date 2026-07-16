@@ -3,8 +3,10 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityInd
 import KeyboardAwareScreen from "../components/KeyboardAwareScreen";
 import { useFocusEffect } from '@react-navigation/native';
 import { insertUnionSale, recentUnionSales, todayUnionSaleTotals } from '../lib/db';
+import { useSubscription } from '../context/SubscriptionContext';
 
 export default function UnionSaleScreen() {
+  const { guard } = useSubscription();
   const [session, setSession] = useState<0 | 1>(new Date().getHours() < 14 ? 0 : 1);
   const [quantity, setQuantity] = useState('');
   const [fat, setFat] = useState('');
@@ -32,6 +34,7 @@ export default function UnionSaleScreen() {
   const kgSnf = qty * sv / 100;
 
   const save = async () => {
+    if (!guard()) return;
     if (!(qty > 0)) return Alert.alert('Missing', 'Enter quantity');
     if (!(rv > 0)) return Alert.alert('Missing', 'Enter rate');
 

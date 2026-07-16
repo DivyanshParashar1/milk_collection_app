@@ -28,9 +28,11 @@ import {
   upsertLedgerFromServer,
   upsertLocalSaleFromServer,
   upsertUnionSaleFromServer,
+  withTransaction,
 } from './db';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getSettings, saveSettings } from './settings';
+import { refreshLock } from './subscription';
 
 export type SyncResult = {
   pushedMembers: number;
@@ -43,195 +45,156 @@ export type SyncResult = {
   error?: string;
 };
 
+// The society id never changes for a signed-in user, but pushAll + pullAll each
+// used to re-fetch it, and via getUser() — which is a network call. getSession()
+// reads the cached session locally, and the profile lookup is memoised, so a
+// full sync now spends one request on this instead of four.
+let societyCache: { userId: string; societyId: string } | null = null;
+
+export function clearSocietyCache(): void {
+  societyCache = null;
+}
+
 async function currentSocietyId(): Promise<string | null> {
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData?.user) return null;
-  const { data } = await supabase
+  const { data } = await supabase.auth.getSession();
+  const userId = data.session?.user?.id;
+  if (!userId) return null;
+  if (societyCache?.userId === userId) return societyCache.societyId;
+
+  const { data: profile } = await supabase
     .from('profiles')
     .select('society_id')
-    .eq('id', userData.user.id)
+    .eq('id', userId)
     .single();
-  return data?.society_id ?? null;
+  const societyId = profile?.society_id ?? null;
+  if (societyId) societyCache = { userId, societyId };
+  return societyId;
+}
+
+// PostgREST accepts an array body, so a table syncs in one request instead of
+// one per row. Chunked to keep any single request a sane size.
+const PUSH_CHUNK = 500;
+
+async function pushTable<T extends { local_id: number; client_id: string }>(
+  table: string,
+  onConflict: string,
+  rows: T[],
+  toPayload: (row: T) => Record<string, unknown>,
+  mark: (localId: number, remoteId: string) => Promise<void>
+): Promise<{ pushed: number; error?: string }> {
+  if (!rows.length) return { pushed: 0 };
+  let pushed = 0;
+
+  for (let i = 0; i < rows.length; i += PUSH_CHUNK) {
+    const chunk = rows.slice(i, i + PUSH_CHUNK);
+    const { data, error } = await supabase
+      .from(table)
+      .upsert(chunk.map(toPayload), { onConflict, ignoreDuplicates: false })
+      .select('id, client_id');
+    if (error) return { pushed, error: error.message };
+
+    // Every payload carries client_id, so the returned rows map back to local
+    // rows by it — including members, whose conflict target is membercode.
+    const remoteIdByClientId = new Map<string, string>(
+      (data ?? []).map((d: any) => [d.client_id, d.id])
+    );
+    await withTransaction(async () => {
+      for (const row of chunk) {
+        const remoteId = remoteIdByClientId.get(row.client_id);
+        if (remoteId) {
+          await mark(row.local_id, remoteId);
+          pushed++;
+        }
+      }
+    });
+  }
+  return { pushed };
 }
 
 export async function pushAll(): Promise<SyncResult> {
   const societyId = await currentSocietyId();
   const empty: SyncResult = { pushedMembers: 0, pushedCollections: 0, pushedPayouts: 0, pushedLedger: 0, pushedLocalSales: 0, pushedUnionSales: 0, pulled: 0 };
-  if (!societyId)
-    return { ...empty, error: 'Not signed in / no society set' };
+  if (!societyId) return { ...empty, error: 'Not signed in / no society set' };
 
-  let pushedMembers = 0;
-  let pushedCollections = 0;
-  let pushedPayouts = 0;
-  let pushedLedger = 0;
-  let pushedLocalSales = 0;
-  let pushedUnionSales = 0;
+  const result: SyncResult = { ...empty };
 
-  // --- members ---
-  const members = await unsyncedMembers();
-  for (const m of members) {
-    const { data, error } = await supabase
-      .from('members')
-      .upsert(
-        {
-          client_id: m.client_id,
-          society_id: societyId,
-          membercode: m.membercode,
-          name: m.name,
-          name_local: m.name_local,
-          mobile1: m.mobile1,
-          animal_type: m.animal_type,
-          upi_id: m.upi_id,
-          bank_account: m.bank_account,
-          ifsc_code: m.ifsc_code,
-          fix_deduction: m.fix_deduction,
-        },
-        { onConflict: 'society_id,membercode', ignoreDuplicates: false }
-      )
-      .select('id')
-      .single();
-    if (error) return { ...empty, pushedMembers, pushedCollections, pushedPayouts, pushedLedger, pushedLocalSales, pushedUnionSales, error: error.message };
-    await markMemberSynced(m.local_id, data.id);
-    pushedMembers++;
-  }
+  // Members go first: collections and payouts reference membercode, so the
+  // server must know the farmer before rows pointing at them arrive.
+  const members = await pushTable(
+    'members', 'society_id,membercode', await unsyncedMembers(),
+    (m) => ({
+      client_id: m.client_id, society_id: societyId, membercode: m.membercode,
+      name: m.name, name_local: m.name_local, mobile1: m.mobile1,
+      animal_type: m.animal_type, upi_id: m.upi_id, bank_account: m.bank_account,
+      ifsc_code: m.ifsc_code, fix_deduction: m.fix_deduction,
+    }),
+    markMemberSynced
+  );
+  result.pushedMembers = members.pushed;
+  if (members.error) return { ...result, error: members.error };
 
-  // --- milk collections ---
-  const cols = await unsyncedCollections();
-  for (const c of cols) {
-    const { data, error } = await supabase
-      .from('milk_collections')
-      .upsert(
-        {
-          client_id: c.client_id,
-          society_id: societyId,
-          membercode: c.membercode,
-          session: c.session,
-          collect_date: c.collect_date,
-          weight: c.weight,
-          fat: c.fat,
-          snf: c.snf,
-          clr: c.clr,
-          rate: c.rate,
-          price: c.price,
-          kg_fat: c.kg_fat,
-          kg_snf: c.kg_snf,
-          deduction: c.deduction,
-          pay_price: c.pay_price,
-          animal_type: c.animal_type,
-        },
-        { onConflict: 'society_id,client_id', ignoreDuplicates: false }
-      )
-      .select('id')
-      .single();
-    if (error) return { ...empty, pushedMembers, pushedCollections, pushedPayouts, pushedLedger, pushedLocalSales, pushedUnionSales, error: error.message };
-    await markCollectionSynced(c.local_id, data.id);
-    pushedCollections++;
-  }
+  const cols = await pushTable(
+    'milk_collections', 'society_id,client_id', await unsyncedCollections(),
+    (c) => ({
+      client_id: c.client_id, society_id: societyId, membercode: c.membercode,
+      session: c.session, collect_date: c.collect_date, weight: c.weight,
+      fat: c.fat, snf: c.snf, clr: c.clr, rate: c.rate, price: c.price,
+      kg_fat: c.kg_fat, kg_snf: c.kg_snf, deduction: c.deduction,
+      pay_price: c.pay_price, animal_type: c.animal_type,
+    }),
+    markCollectionSynced
+  );
+  result.pushedCollections = cols.pushed;
+  if (cols.error) return { ...result, error: cols.error };
 
-  // --- payouts (cash / upi) ---
-  const payouts = await unsyncedPayouts();
-  for (const p of payouts) {
-    const { data, error } = await supabase
-      .from('payouts')
-      .upsert(
-        {
-          client_id: p.client_id,
-          society_id: societyId,
-          membercode: p.membercode,
-          amount: p.amount,
-          method: p.method,
-          upi_ref: p.upi_ref,
-          note: p.note,
-        },
-        { onConflict: 'society_id,client_id', ignoreDuplicates: false }
-      )
-      .select('id')
-      .single();
-    if (error) return { ...empty, pushedMembers, pushedCollections, pushedPayouts, pushedLedger, pushedLocalSales, pushedUnionSales, error: error.message };
-    await markPayoutSynced(p.local_id, data.id);
-    pushedPayouts++;
-  }
+  const payouts = await pushTable(
+    'payouts', 'society_id,client_id', await unsyncedPayouts(),
+    (p) => ({
+      client_id: p.client_id, society_id: societyId, membercode: p.membercode,
+      amount: p.amount, method: p.method, upi_ref: p.upi_ref, note: p.note,
+    }),
+    markPayoutSynced
+  );
+  result.pushedPayouts = payouts.pushed;
+  if (payouts.error) return { ...result, error: payouts.error };
 
-  // --- ledger entries (jama / udhar) ---
-  const ledger = await unsyncedLedgerEntries();
-  for (const le of ledger) {
-    const { data, error } = await supabase
-      .from('ledger_entries')
-      .upsert(
-        {
-          client_id: le.client_id,
-          society_id: societyId,
-          membercode: le.membercode,
-          amount: le.amount,
-          kind: le.kind,
-          note: le.note,
-          entry_date: le.entry_date,
-        },
-        { onConflict: 'society_id,client_id', ignoreDuplicates: false }
-      )
-      .select('id')
-      .single();
-    if (error) return { ...empty, pushedMembers, pushedCollections, pushedPayouts, pushedLedger, pushedLocalSales, pushedUnionSales, error: error.message };
-    await markLedgerSynced(le.local_id, data.id);
-    pushedLedger++;
-  }
+  const ledger = await pushTable(
+    'ledger_entries', 'society_id,client_id', await unsyncedLedgerEntries(),
+    (le) => ({
+      client_id: le.client_id, society_id: societyId, membercode: le.membercode,
+      amount: le.amount, kind: le.kind, note: le.note, entry_date: le.entry_date,
+    }),
+    markLedgerSynced
+  );
+  result.pushedLedger = ledger.pushed;
+  if (ledger.error) return { ...result, error: ledger.error };
 
-  // --- local sales ---
-  const sales = await unsyncedLocalSales();
-  for (const s of sales) {
-    const { data, error } = await supabase
-      .from('local_sales')
-      .upsert(
-        {
-          client_id: s.client_id,
-          society_id: societyId,
-          customer_name: s.customer_name,
-          quantity: s.quantity,
-          rate: s.rate,
-          amount: s.amount,
-          milk_type: s.milk_type,
-          sale_date: s.sale_date,
-        },
-        { onConflict: 'society_id,client_id', ignoreDuplicates: false }
-      )
-      .select('id')
-      .single();
-    if (error) return { ...empty, pushedMembers, pushedCollections, pushedPayouts, pushedLedger, pushedLocalSales, pushedUnionSales, error: error.message };
-    await markLocalSaleSynced(s.local_id, data.id);
-    pushedLocalSales++;
-  }
+  const localSales = await pushTable(
+    'local_sales', 'society_id,client_id', await unsyncedLocalSales(),
+    (s) => ({
+      client_id: s.client_id, society_id: societyId, customer_name: s.customer_name,
+      quantity: s.quantity, rate: s.rate, amount: s.amount,
+      milk_type: s.milk_type, sale_date: s.sale_date,
+    }),
+    markLocalSaleSynced
+  );
+  result.pushedLocalSales = localSales.pushed;
+  if (localSales.error) return { ...result, error: localSales.error };
 
-  // --- union sales ---
-  const uSales = await unsyncedUnionSales();
-  for (const u of uSales) {
-    const { data, error } = await supabase
-      .from('union_sales')
-      .upsert(
-        {
-          client_id: u.client_id,
-          society_id: societyId,
-          sale_date: u.sale_date,
-          session: u.session,
-          quantity: u.quantity,
-          fat: u.fat,
-          snf: u.snf,
-          rate: u.rate,
-          amount: u.amount,
-          kg_fat: u.kg_fat,
-          kg_snf: u.kg_snf,
-          union_name: u.union_name,
-          note: u.note,
-        },
-        { onConflict: 'society_id,client_id', ignoreDuplicates: false }
-      )
-      .select('id')
-      .single();
-    if (error) return { ...empty, pushedMembers, pushedCollections, pushedPayouts, pushedLedger, pushedLocalSales, pushedUnionSales, error: error.message };
-    await markUnionSaleSynced(u.local_id, data.id);
-    pushedUnionSales++;
-  }
+  const unionSales = await pushTable(
+    'union_sales', 'society_id,client_id', await unsyncedUnionSales(),
+    (u) => ({
+      client_id: u.client_id, society_id: societyId, sale_date: u.sale_date,
+      session: u.session, quantity: u.quantity, fat: u.fat, snf: u.snf,
+      rate: u.rate, amount: u.amount, kg_fat: u.kg_fat, kg_snf: u.kg_snf,
+      union_name: u.union_name, note: u.note,
+    }),
+    markUnionSaleSynced
+  );
+  result.pushedUnionSales = unionSales.pushed;
+  if (unionSales.error) return { ...result, error: unionSales.error };
 
-  return { pushedMembers, pushedCollections, pushedPayouts, pushedLedger, pushedLocalSales, pushedUnionSales, pulled: 0 };
+  return result;
 }
 
 // --- Edit / delete a collection, keeping local + server consistent ---------
@@ -326,80 +289,45 @@ export async function pullAll(): Promise<{ pulled: number; error?: string }> {
   if (!societyId) return { pulled: 0, error: 'Not signed in / no society set' };
 
   const lastPull = (await AsyncStorage.getItem(LAST_PULL_KEY)) ?? '1970-01-01T00:00:00Z';
-  let pulled = 0;
 
   try {
-    // --- sync society subscription status ---
-    const { data: soc } = await supabase.from('societies').select('subscription_end_date, is_active').eq('id', societyId).single();
-    if (soc) {
+    // All seven queries go out together. They are independent, so paying for
+    // seven serial round-trips on a rural connection was most of the wait.
+    const [soc, members, cols, payouts, ledger, lSales, uSales] = await Promise.all([
+      supabase.from('societies').select('subscription_end_date, is_active').eq('id', societyId).single(),
+      supabase.from('members').select('*').eq('society_id', societyId).gt('updated_at', lastPull).order('updated_at'),
+      supabase.from('milk_collections').select('*').eq('society_id', societyId).gt('created_at', lastPull).order('created_at'),
+      supabase.from('payouts').select('*').eq('society_id', societyId).gt('created_at', lastPull).order('created_at'),
+      supabase.from('ledger_entries').select('*').eq('society_id', societyId).gt('created_at', lastPull).order('created_at'),
+      supabase.from('local_sales').select('*').eq('society_id', societyId).gt('created_at', lastPull).order('created_at'),
+      supabase.from('union_sales').select('*').eq('society_id', societyId).gt('created_at', lastPull).order('created_at'),
+    ]);
+
+    const failed = [members, cols, payouts, ledger, lSales, uSales].find((r) => r.error);
+    if (failed?.error) return { pulled: 0, error: failed.error.message };
+
+    // Subscription status drives the write lock, so refresh it immediately —
+    // this is how a renewal reaches a locked device.
+    if (soc.data) {
       const s = await getSettings();
-      await saveSettings({ ...s, subscriptionEnd: soc.subscription_end_date, isActive: soc.is_active });
+      await saveSettings({ ...s, subscriptionEnd: soc.data.subscription_end_date, isActive: soc.data.is_active });
+      await refreshLock();
     }
 
-    // --- members (has updated_at on server) ---
-    const { data: members, error: e1 } = await supabase
-      .from('members')
-      .select('*')
-      .eq('society_id', societyId)
-      .gt('updated_at', lastPull)
-      .order('updated_at');
-    if (e1) return { pulled, error: e1.message };
-    for (const m of members ?? []) { await upsertMemberFromServer(m); pulled++; }
+    // One transaction for the whole pull rather than one commit per row.
+    let pulled = 0;
+    await withTransaction(async () => {
+      for (const m of members.data ?? []) { await upsertMemberFromServer(m); pulled++; }
+      for (const c of cols.data ?? []) { await upsertCollectionFromServer(c); pulled++; }
+      for (const p of payouts.data ?? []) { await upsertPayoutFromServer(p); pulled++; }
+      for (const l of ledger.data ?? []) { await upsertLedgerFromServer(l); pulled++; }
+      for (const s of lSales.data ?? []) { await upsertLocalSaleFromServer(s); pulled++; }
+      for (const u of uSales.data ?? []) { await upsertUnionSaleFromServer(u); pulled++; }
+    });
 
-    // --- collections ---
-    const { data: cols, error: e2 } = await supabase
-      .from('milk_collections')
-      .select('*')
-      .eq('society_id', societyId)
-      .gt('created_at', lastPull)
-      .order('created_at');
-    if (e2) return { pulled, error: e2.message };
-    for (const c of cols ?? []) { await upsertCollectionFromServer(c); pulled++; }
-
-    // --- payouts ---
-    const { data: payouts, error: e3 } = await supabase
-      .from('payouts')
-      .select('*')
-      .eq('society_id', societyId)
-      .gt('created_at', lastPull)
-      .order('created_at');
-    if (e3) return { pulled, error: e3.message };
-    for (const p of payouts ?? []) { await upsertPayoutFromServer(p); pulled++; }
-
-    // --- ledger ---
-    const { data: ledger, error: e4 } = await supabase
-      .from('ledger_entries')
-      .select('*')
-      .eq('society_id', societyId)
-      .gt('created_at', lastPull)
-      .order('created_at');
-    if (e4) return { pulled, error: e4.message };
-    for (const l of ledger ?? []) { await upsertLedgerFromServer(l); pulled++; }
-
-    // --- local sales ---
-    const { data: lSales, error: e5 } = await supabase
-      .from('local_sales')
-      .select('*')
-      .eq('society_id', societyId)
-      .gt('created_at', lastPull)
-      .order('created_at');
-    if (e5) return { pulled, error: e5.message };
-    for (const s of lSales ?? []) { await upsertLocalSaleFromServer(s); pulled++; }
-
-    // --- union sales ---
-    const { data: uSales, error: e6 } = await supabase
-      .from('union_sales')
-      .select('*')
-      .eq('society_id', societyId)
-      .gt('created_at', lastPull)
-      .order('created_at');
-    if (e6) return { pulled, error: e6.message };
-    for (const u of uSales ?? []) { await upsertUnionSaleFromServer(u); pulled++; }
-
-    // update timestamp
     await AsyncStorage.setItem(LAST_PULL_KEY, new Date().toISOString());
     return { pulled };
   } catch (err: any) {
-    return { pulled, error: err?.message ?? String(err) };
+    return { pulled: 0, error: err?.message ?? String(err) };
   }
 }

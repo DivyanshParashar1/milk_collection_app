@@ -3,8 +3,10 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityInd
 import KeyboardAwareScreen from "../components/KeyboardAwareScreen";
 import { useFocusEffect } from '@react-navigation/native';
 import { getMemberByCode, insertLedgerEntry, recentLedgerEntries, ledgerBalance } from '../lib/db';
+import { useSubscription } from '../context/SubscriptionContext';
 
 export default function LedgerScreen({ navigation }: any) {
+  const { guard } = useSubscription();
   const [code, setCode] = useState('');
   const [memberName, setMemberName] = useState<string | null>(null);
   const [amount, setAmount] = useState('');
@@ -26,6 +28,7 @@ export default function LedgerScreen({ navigation }: any) {
   }, [code]);
 
   const save = async () => {
+    if (!guard()) return;
     const c = parseInt(code, 10);
     if (!c) return Alert.alert('Missing', 'Enter a member code');
     if (!memberName) return Alert.alert('Unknown member', `No member ${c}. Add them first.`);

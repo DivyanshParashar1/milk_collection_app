@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import KeyboardAwareScreen from "../components/KeyboardAwareScreen";
 import { getLocalSaleRates, setLocalSaleRate } from '../lib/db';
+import { useSubscription } from '../context/SubscriptionContext';
 
 const TYPES = [
   { key: 'cow', label: '🐄 Cow', color: '#1b9c66' },
@@ -10,6 +11,7 @@ const TYPES = [
 ] as const;
 
 export default function LocalSaleRateScreen() {
+  const { guard } = useSubscription();
   const [rates, setRates] = useState<{ [k: string]: string }>({ cow: '', buff: '', mix: '' });
 
   useEffect(() => {
@@ -21,6 +23,7 @@ export default function LocalSaleRateScreen() {
   }, []);
 
   const save = async () => {
+    if (!guard()) return;
     for (const t of TYPES) {
       const v = parseFloat(rates[t.key]) || 0;
       await setLocalSaleRate(t.key, v);

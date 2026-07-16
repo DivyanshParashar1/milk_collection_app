@@ -6,7 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const SUPPORT_PHONE = '7737115459';
 const LAST_SYNC_KEY = 'last_sync_time';
 import { useAuth } from '../context/AuthContext';
-import { getSettings } from '../lib/settings';
+import { useSubscription } from '../context/SubscriptionContext';
 import { todayTotals, pendingCount } from '../lib/db';
 import { pushAll, pullAll } from '../lib/sync';
 import { showHelp } from '../lib/help';
@@ -30,8 +30,8 @@ const TILES: Tile[] = [
 
 export default function HomeScreen({ navigation }: any) {
   const { signOut } = useAuth();
+  const { locked, refresh: refreshLock } = useSubscription();
   const [totals, setTotals] = useState({ litres: 0, amount: 0, count: 0 });
-  const [subStatus, setSubStatus] = useState<'ok' | 'locked_entry' | 'locked_all'>('ok');
   const [pending, setPending] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -55,24 +55,8 @@ export default function HomeScreen({ navigation }: any) {
     setPending(await pendingCount());
     const saved = await AsyncStorage.getItem(LAST_SYNC_KEY);
     setLastSync(saved);
-
-    const s = await getSettings();
-    if (s.isActive === false) {
-      setSubStatus('locked_all');
-    } else if (s.subscriptionEnd) {
-      const end = new Date(s.subscriptionEnd).getTime();
-      const now = Date.now();
-      if (now > end) {
-        const daysExpired = (now - end) / (1000 * 3600 * 24);
-        if (daysExpired > 10) setSubStatus('locked_all');
-        else setSubStatus('locked_entry');
-      } else {
-        setSubStatus('ok');
-      }
-    } else {
-      setSubStatus('ok');
-    }
-  }, []);
+    await refreshLock();
+  }, [refreshLock]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -97,33 +81,26 @@ export default function HomeScreen({ navigation }: any) {
     }
   };
 
-  if (subStatus === 'locked_all') {
-    return (
-      <View style={[styles.wrap, { justifyContent: 'center', padding: 24 }]}>
-        <Text style={{ fontSize: 60, textAlign: 'center' }}>🔒</Text>
-        <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#c0392b', textAlign: 'center', marginTop: 16 }}>Subscription Expired</Text>
-        <Text style={{ fontSize: 16, color: '#4a5a6a', textAlign: 'center', marginTop: 8, marginBottom: 32 }}>Please renew your subscription to continue using Neerja Milk Collection.</Text>
-        <TouchableOpacity style={{ backgroundColor: '#1b9c66', padding: 16, borderRadius: 12, alignItems: 'center' }} onPress={() => navigation.navigate('Subscription')}>
-          <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>View Subscription Options</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={{ marginTop: 24, padding: 16, alignItems: 'center' }} onPress={signOut}>
-          <Text style={{ color: '#0d1b2a', fontWeight: 'bold', fontSize: 16 }}>Sign Out</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
   return (
     <>
     <ScrollView style={styles.wrap} contentContainerStyle={{ padding: 16 }}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
       <Text style={[styles.title, { marginBottom: 16 }]}>Today · आज</Text>
 
-      {subStatus === 'locked_entry' && (
-        <View style={{ backgroundColor: '#fcebe9', padding: 12, borderRadius: 10, marginBottom: 16 }}>
-          <Text style={{ color: '#c0392b', fontWeight: 'bold' }}>⚠️ Subscription Expired</Text>
-          <Text style={{ color: '#c0392b', fontSize: 12, marginTop: 4 }}>Data entry is blocked. You have limited time to view reports before full lockout. Renew now.</Text>
-        </View>
+      {locked && (
+        <TouchableOpacity
+          style={styles.lockBanner}
+          onPress={() => navigation.navigate('Subscription')}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.lockBannerTitle}>🔒 Subscription expired · सदस्यता समाप्त</Text>
+          <Text style={styles.lockBannerBody}>
+            आप सब कुछ देख सकते हैं, पर नया डेटा नहीं जोड़ सकते। नवीनीकरण के लिए दबाएँ।
+          </Text>
+          <Text style={styles.lockBannerBody}>
+            You can view everything, but adding or changing data is locked. Tap to renew.
+          </Text>
+        </TouchableOpacity>
       )}
 
       <View style={styles.statsRow}>
@@ -151,22 +128,22 @@ export default function HomeScreen({ navigation }: any) {
       </TouchableOpacity>
 
       <View style={styles.grid}>
-        {TILES.map((t) => {
-          const isBlocked = subStatus === 'locked_entry' && t.entry;
-          return (
-            <TouchableOpacity
-              key={t.route}
-              style={[styles.tile, { backgroundColor: isBlocked ? '#9aa' : t.color }]}
-              onPress={() => !isBlocked && navigation.navigate(t.route)}
-              onLongPress={() => showHelp(t.en, t.hi, t.descHi, t.descEn)}
-              activeOpacity={0.85}
-            >
-              <Text style={styles.tileIcon}>{t.icon}</Text>
-              <Text style={styles.tileEn}>{t.en}</Text>
-              <Text style={styles.tileHi}>{t.hi}</Text>
-            </TouchableOpacity>
-          );
-        })}
+        {/* Every tile stays open when locked — browsing is allowed, the write
+            itself is what each screen refuses. */}
+        {TILES.map((t) => (
+          <TouchableOpacity
+            key={t.route}
+            style={[styles.tile, { backgroundColor: t.color }]}
+            onPress={() => navigation.navigate(t.route)}
+            onLongPress={() => showHelp(t.en, t.hi, t.descHi, t.descEn)}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.tileIcon}>{t.icon}</Text>
+            <Text style={styles.tileEn}>{t.en}</Text>
+            <Text style={styles.tileHi}>{t.hi}</Text>
+            {locked && t.entry && <Text style={styles.tileLock}>🔒</Text>}
+          </TouchableOpacity>
+        ))}
       </View>
 
       <Text style={styles.hint}>दबाकर रखें = मदद · Press & hold any button for help</Text>
@@ -231,8 +208,12 @@ const styles = StyleSheet.create({
   syncError: { backgroundColor: '#c0392b' },
   syncText: { color: '#fff', fontWeight: '800', fontSize: 16 },
   syncSub: { color: 'rgba(255,255,255,0.75)', fontSize: 11, marginTop: 2 },
+  lockBanner: { backgroundColor: '#fcebe9', borderWidth: 1, borderColor: '#f0b8b0', padding: 12, borderRadius: 10, marginBottom: 16 },
+  lockBannerTitle: { color: '#c0392b', fontWeight: '800', fontSize: 15 },
+  lockBannerBody: { color: '#c0392b', fontSize: 12, marginTop: 4 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   tile: { width: '48%', borderRadius: 16, padding: 16, alignItems: 'center' },
+  tileLock: { position: 'absolute', top: 8, right: 10, fontSize: 14 },
   tileIcon: { fontSize: 32, marginBottom: 8 },
   tileEn: { color: '#fff', fontWeight: '800', fontSize: 15, textAlign: 'center' },
   tileHi: { color: '#fff', opacity: 0.8, fontSize: 12, marginTop: 4 },

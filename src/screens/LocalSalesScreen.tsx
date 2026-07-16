@@ -3,10 +3,12 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityInd
 import KeyboardAwareScreen from "../components/KeyboardAwareScreen";
 import { useFocusEffect } from '@react-navigation/native';
 import { insertLocalSale, recentLocalSales, todayLocalSaleTotals, getLocalSaleRates } from '../lib/db';
+import { useSubscription } from '../context/SubscriptionContext';
 
 const MILK_TYPES = ['cow', 'buff', 'mix'] as const;
 
 export default function LocalSalesScreen({ navigation }: any) {
+  const { guard } = useSubscription();
   const [customer, setCustomer] = useState('');
   const [quantity, setQuantity] = useState('');
   const [rate, setRate] = useState('');
@@ -43,6 +45,7 @@ export default function LocalSalesScreen({ navigation }: any) {
   const computedAmount = (parseFloat(quantity) || 0) * (parseFloat(rate) || 0);
 
   const save = async () => {
+    if (!guard()) return;
     const qty = parseFloat(quantity);
     const r = parseFloat(rate);
     if (!qty || qty <= 0) return Alert.alert('Missing', 'Enter quantity');

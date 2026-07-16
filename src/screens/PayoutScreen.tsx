@@ -5,8 +5,10 @@ import { showHelp } from '../lib/help';
 import { getMemberByCode, farmerBalance, insertPayout } from '../lib/db';
 import { openUpiPayment, isValidVpa, isValidMobile, phoneToVpa } from '../lib/upi';
 import { getSettings } from '../lib/settings';
+import { useSubscription } from '../context/SubscriptionContext';
 
 export default function PayoutScreen({ route }: any) {
+  const { guard } = useSubscription();
   const [code, setCode] = useState(route?.params?.membercode ? String(route.params.membercode) : '');
   const [member, setMember] = useState<any | null>(null);
   const [balance, setBalance] = useState(0);
@@ -14,18 +16,10 @@ export default function PayoutScreen({ route }: any) {
   const [upiId, setUpiId] = useState('');
   const [upiSource, setUpiSource] = useState<'id' | 'mobile' | 'none'>('none');
   const [upiHandle, setUpiHandle] = useState('upi');
-  const [subExpired, setSubExpired] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    getSettings().then((st) => {
-      setUpiHandle(st.upiHandle);
-      if (st.isActive === false) { setSubExpired(true); return; }
-      if (st.subscriptionEnd) {
-        const daysExpired = (Date.now() - new Date(st.subscriptionEnd).getTime()) / (1000 * 3600 * 24);
-        setSubExpired(daysExpired > 0);
-      }
-    });
+    getSettings().then((st) => setUpiHandle(st.upiHandle));
   }, []);
 
   // resolve farmer as the code is typed
@@ -66,7 +60,7 @@ export default function PayoutScreen({ route }: any) {
     const amt = parseFloat(amount);
     if (!member) return Alert.alert('Farmer', 'Enter a valid member code');
     if (!(amt > 0)) return Alert.alert('Amount', 'Enter an amount');
-    if (subExpired) return Alert.alert('Subscription Expired', 'Renew your subscription to record payouts.');
+    if (!guard()) return;
     Alert.alert('Pay by cash?', `₹${amt.toFixed(0)} to ${member.name}`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Yes, paid', onPress: () => recordPayout('cash') },
@@ -78,7 +72,7 @@ export default function PayoutScreen({ route }: any) {
     if (!member) return Alert.alert('Farmer', 'Enter a valid member code');
     if (!(amt > 0)) return Alert.alert('Amount', 'Enter an amount');
     if (!isValidVpa(upiId)) return Alert.alert('UPI id needed', 'Enter the farmer\'s UPI id (e.g. 98765xxxxx@ybl)');
-    if (subExpired) return Alert.alert('Subscription Expired', 'Renew your subscription to record payouts.');
+    if (!guard()) return;
 
     setBusy(true);
     const opened = await openUpiPayment({ vpa: upiId, name: member.name, amount: amt, note: `Milk ${member.membercode}` });

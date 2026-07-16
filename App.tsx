@@ -6,6 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
 import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { SubscriptionProvider } from './src/context/SubscriptionContext';
 import { getRateChart, setRateChart } from './src/lib/db';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import LoginScreen from './src/screens/LoginScreen';
@@ -113,10 +114,12 @@ export default function App() {
     <ErrorBoundary>
       <SafeAreaProvider>
         <AuthProvider>
-          <NavigationContainer>
-            <StatusBar style="light" />
-            <Root />
-          </NavigationContainer>
+          <SubscriptionProvider>
+            <NavigationContainer>
+              <StatusBar style="light" />
+              <Root />
+            </NavigationContainer>
+          </SubscriptionProvider>
         </AuthProvider>
       </SafeAreaProvider>
     </ErrorBoundary>

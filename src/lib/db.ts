@@ -6,6 +6,7 @@
 // `synflags`/`vd_flgs` dirty-row mechanism.
 // ============================================================================
 import * as SQLite from 'expo-sqlite';
+import { assertUnlocked } from './subscription';
 
 /** Generate a UUID v4 (works in Expo SDK 57+ which ships crypto.randomUUID). */
 function newUUID(): string {
@@ -188,6 +189,22 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
   return _db;
 }
 
+/**
+ * Run `fn` inside a single SQLite transaction.
+ *
+ * Sync writes hundreds of rows at once; without this each statement commits
+ * separately and pays its own fsync, which is what made syncing feel like a
+ * slow network rather than slow disk.
+ */
+export async function withTransaction<T>(fn: () => Promise<T>): Promise<T> {
+  const db = await getDb();
+  let result!: T;
+  await db.withTransactionAsync(async () => {
+    result = await fn();
+  });
+  return result;
+}
+
 /** Return today's date as YYYY-MM-DD in IST (UTC+5:30). */
 export function todayIST(): string {
   const now = new Date();
@@ -210,6 +227,7 @@ export type LocalMember = {
 };
 
 export async function insertMember(m: LocalMember) {
+  assertUnlocked();
   const db = await getDb();
   await db.runAsync(
     `INSERT OR REPLACE INTO members
@@ -241,6 +259,7 @@ export async function getMemberByCode(code: number): Promise<any | null> {
 }
 
 export async function updateMember(m: LocalMember) {
+  assertUnlocked();
   const db = await getDb();
   await db.runAsync(
     `UPDATE members SET name=?, name_local=?, mobile1=?, animal_type=?, upi_id=?,
@@ -262,6 +281,7 @@ export async function updateMember(m: LocalMember) {
 
 /** Delete a member and all their local data (collections, payouts, ledger). */
 export async function deleteMember(membercode: number) {
+  assertUnlocked();
   const db = await getDb();
   await db.runAsync(`DELETE FROM milk_collections WHERE membercode=?`, [membercode]);
   await db.runAsync(`DELETE FROM payouts WHERE membercode=?`, [membercode]);
@@ -331,6 +351,7 @@ export type LocalCollection = {
 };
 
 export async function insertCollection(c: LocalCollection) {
+  assertUnlocked();
   const db = await getDb();
   await db.runAsync(
     `INSERT INTO milk_collections
@@ -374,6 +395,7 @@ export type CollectionValues = {
 };
 
 export async function updateCollectionLocal(localId: number, c: CollectionValues) {
+  assertUnlocked();
   const db = await getDb();
   await db.runAsync(
     `UPDATE milk_collections SET weight=?, fat=?, snf=?, rate=?, price=?,
@@ -383,6 +405,7 @@ export async function updateCollectionLocal(localId: number, c: CollectionValues
 }
 
 export async function deleteCollectionLocal(localId: number) {
+  assertUnlocked();
   const db = await getDb();
   await db.runAsync(`DELETE FROM milk_collections WHERE local_id = ?`, [localId]);
 }
@@ -478,6 +501,7 @@ export async function setRateChart(
   entries: { fat: number; snf?: number | null; rate: number }[],
   animalType: 'cow' | 'buff' | 'mix' = 'mix'
 ) {
+  assertUnlocked();
   const db = await getDb();
   await db.runAsync(`DELETE FROM rate_chart_entries WHERE fat_type = ? OR fat_type IS NULL`, [animalType]);
   for (const e of entries) {
@@ -515,6 +539,7 @@ export type LocalPayout = {
 };
 
 export async function insertPayout(p: LocalPayout) {
+  assertUnlocked();
   const db = await getDb();
   await db.runAsync(
     `INSERT INTO payouts (client_id, membercode, amount, method, upi_ref, note, synced)
@@ -592,6 +617,7 @@ export type LocalLedgerEntry = {
 };
 
 export async function insertLedgerEntry(e: LocalLedgerEntry) {
+  assertUnlocked();
   const db = await getDb();
   await db.runAsync(
     `INSERT INTO ledger_entries (client_id, membercode, amount, kind, note, entry_date, synced)
@@ -686,6 +712,7 @@ export type LocalSale = {
 };
 
 export async function insertLocalSale(s: LocalSale) {
+  assertUnlocked();
   const db = await getDb();
   await db.runAsync(
     `INSERT INTO local_sales (client_id, customer_name, quantity, rate, amount, milk_type, sale_date, synced)
@@ -727,6 +754,7 @@ export async function getLocalSaleRates(): Promise<{ milk_type: string; rate_per
 }
 
 export async function setLocalSaleRate(milkType: string, rate: number) {
+  assertUnlocked();
   const db = await getDb();
   await db.runAsync(
     `INSERT OR REPLACE INTO local_sale_rates (milk_type, rate_per_litre) VALUES (?, ?)`,
@@ -742,6 +770,7 @@ export type LocalKapatItem = {
 };
 
 export async function insertKapatItem(k: LocalKapatItem) {
+  assertUnlocked();
   const db = await getDb();
   await db.runAsync(
     `INSERT INTO kapat_items (name, type, value, active, synced) VALUES (?, ?, ?, 1, 0)`,
@@ -750,6 +779,7 @@ export async function insertKapatItem(k: LocalKapatItem) {
 }
 
 export async function updateKapatItem(localId: number, k: LocalKapatItem) {
+  assertUnlocked();
   const db = await getDb();
   await db.runAsync(
     `UPDATE kapat_items SET name=?, type=?, value=?, synced=0 WHERE local_id=?`,
@@ -758,6 +788,7 @@ export async function updateKapatItem(localId: number, k: LocalKapatItem) {
 }
 
 export async function deleteKapatItem(localId: number) {
+  assertUnlocked();
   const db = await getDb();
   await db.runAsync(`DELETE FROM kapat_items WHERE local_id = ?`, [localId]);
   await db.runAsync(`DELETE FROM member_kapat WHERE kapat_id = ?`, [localId]);
@@ -799,6 +830,7 @@ export async function isSessionLocked(date: string, session: number): Promise<bo
 }
 
 export async function lockSession(date: string, session: number) {
+  assertUnlocked();
   const db = await getDb();
   await db.runAsync(
     `INSERT OR REPLACE INTO session_locks (collect_date, session, locked) VALUES (?, ?, 1)`,
@@ -807,6 +839,7 @@ export async function lockSession(date: string, session: number) {
 }
 
 export async function unlockSession(date: string, session: number) {
+  assertUnlocked();
   const db = await getDb();
   await db.runAsync(
     `INSERT OR REPLACE INTO session_locks (collect_date, session, locked) VALUES (?, ?, 0)`,
@@ -859,6 +892,7 @@ export type LocalUnionSale = {
 };
 
 export async function insertUnionSale(s: LocalUnionSale) {
+  assertUnlocked();
   const db = await getDb();
   await db.runAsync(
     `INSERT INTO union_sales (client_id, sale_date, session, quantity, fat, snf, rate, amount, kg_fat, kg_snf, union_name, note, synced)

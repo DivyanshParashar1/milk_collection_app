@@ -2,8 +2,10 @@ import React, { useEffect, useLayoutEffect, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import KeyboardAwareScreen from "../components/KeyboardAwareScreen";
 import { insertMember, updateMember, getMemberByCode } from '../lib/db';
+import { useSubscription } from '../context/SubscriptionContext';
 
 export default function MemberFormScreen({ navigation, route }: any) {
+  const { guard } = useSubscription();
   const editCode: number | undefined = route?.params?.editCode;
   const isEdit = editCode != null;
 
@@ -36,6 +38,7 @@ export default function MemberFormScreen({ navigation, route }: any) {
   }, [isEdit, editCode]);
 
   const save = async () => {
+    if (!guard()) return;
     const code = parseInt(membercode, 10);
     if (!code || !name.trim()) return Alert.alert('Missing', 'Member code and name are required');
     const payload = {

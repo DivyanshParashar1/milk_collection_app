@@ -2,18 +2,13 @@ import React, { useCallback, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { inventoryTotals } from '../lib/db';
-import { getSettings } from '../lib/settings';
 import { showHelp } from '../lib/help';
 
 export default function InventoryScreen({ navigation }: any) {
   const [inv, setInv] = useState({ collected: 0, unionSold: 0, localSold: 0, remaining: 0 });
-  const [entryLocked, setEntryLocked] = useState(false);
 
   const load = useCallback(async () => {
     setInv(await inventoryTotals());
-    const s = await getSettings();
-    const expired = !!s.subscriptionEnd && Date.now() > new Date(s.subscriptionEnd).getTime();
-    setEntryLocked(s.isActive === false || expired);
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -32,15 +27,14 @@ export default function InventoryScreen({ navigation }: any) {
         <Row icon="📦" hi="बचा हुआ" en="Remaining" value={inv.remaining.toFixed(1)} strong />
       </View>
 
-      {!entryLocked && (
-        <TouchableOpacity
-          style={styles.addBtn}
-          onPress={() => navigation.navigate('MilkCollection', { prefillCode: '9999' })}
-          onLongPress={() => showHelp('Add Stock', 'स्टॉक जोड़ें', 'बाहर से आया दूध भंडार में जोड़ें।', 'Add outside/opening milk to your inventory.')}
-        >
-          <Text style={styles.addText}>➕  स्टॉक जोड़ें · Add Stock</Text>
-        </TouchableOpacity>
-      )}
+      {/* Always shown — MilkCollection refuses the write itself when locked. */}
+      <TouchableOpacity
+        style={styles.addBtn}
+        onPress={() => navigation.navigate('MilkCollection', { prefillCode: '9999' })}
+        onLongPress={() => showHelp('Add Stock', 'स्टॉक जोड़ें', 'बाहर से आया दूध भंडार में जोड़ें।', 'Add outside/opening milk to your inventory.')}
+      >
+        <Text style={styles.addText}>➕  स्टॉक जोड़ें · Add Stock</Text>
+      </TouchableOpacity>
     </View>
   );
 }

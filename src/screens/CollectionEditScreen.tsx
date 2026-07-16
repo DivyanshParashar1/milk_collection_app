@@ -6,8 +6,10 @@ import { getCollection, getMemberByCode, getRateChart } from '../lib/db';
 import { saveCollectionEdit, deleteCollection } from '../lib/sync';
 import { getSettings } from '../lib/settings';
 import { printCollectionSlip } from '../lib/print';
+import { useSubscription } from '../context/SubscriptionContext';
 
 export default function CollectionEditScreen({ route, navigation }: any) {
+  const { guard } = useSubscription();
   const localId: number = route.params.localId;
   const [row, setRow] = useState<any | null>(null);
   const [name, setName] = useState<string>('');
@@ -45,6 +47,7 @@ export default function CollectionEditScreen({ route, navigation }: any) {
   );
 
   const save = async () => {
+    if (!guard()) return;
     if (!(parseFloat(weight) > 0)) return Alert.alert('Weight', 'Enter a valid weight');
     setBusy(true);
     const { error } = await saveCollectionEdit(row, {
@@ -57,6 +60,7 @@ export default function CollectionEditScreen({ route, navigation }: any) {
   };
 
   const remove = () => {
+    if (!guard()) return;
     Alert.alert('Delete entry?', `${name} · ${row?.weight}L @ ${row?.fat}%`, [
       { text: 'Cancel', style: 'cancel' },
       {

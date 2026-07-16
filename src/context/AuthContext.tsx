@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
-import { pullAll, pushAll } from '../lib/sync';
+import { clearSocietyCache, pullAll, pushAll } from '../lib/sync';
 
 type AuthState = {
   session: Session | null;
@@ -39,8 +39,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (!s) {
-        // Signed out — reset so next login triggers a fresh pull
+        // Signed out — reset so next login triggers a fresh pull, and drop the
+        // memoised society id so the next user cannot inherit it.
         didInitialPull.current = false;
+        clearSocietyCache();
       }
     });
     return () => sub.subscription.unsubscribe();
