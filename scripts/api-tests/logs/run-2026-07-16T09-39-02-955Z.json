@@ -1,0 +1,106 @@
+{
+  "at": "2026-07-16T09:39:02.955Z",
+  "pass": 13,
+  "fail": 1,
+  "error": 0,
+  "results": [
+    {
+      "suite": "Auth",
+      "name": "signIn with correct password returns a session",
+      "status": "pass",
+      "ms": 325,
+      "detail": "token len 840"
+    },
+    {
+      "suite": "Auth",
+      "name": "signIn with wrong password → LoginScreen shows \"wrong password\"",
+      "status": "pass",
+      "ms": 285,
+      "detail": "invalid_credentials: Invalid login credentials"
+    },
+    {
+      "suite": "Auth",
+      "name": "signIn as a user that does not exist → same generic message (no user enumeration)",
+      "status": "pass",
+      "ms": 271,
+      "detail": "Invalid login credentials"
+    },
+    {
+      "suite": "Auth",
+      "name": "signIn with empty password is rejected",
+      "status": "pass",
+      "ms": 321,
+      "detail": "invalid_credentials: Invalid login credentials"
+    },
+    {
+      "suite": "Auth",
+      "name": "signUp with a fresh mobile creates an account",
+      "status": "pass",
+      "ms": 369,
+      "detail": "user 45551f42"
+    },
+    {
+      "suite": "Auth",
+      "name": "the signup trigger auto-creates a profile row",
+      "status": "fail",
+      "ms": 641,
+      "detail": "a brand-new signup should have no society yet: expected null, got \"022d975d-a070-49ac-8913-db57ceb03da0\""
+    },
+    {
+      "suite": "Auth",
+      "name": "signUp twice with the same mobile → LoginScreen shows \"already registered\"",
+      "status": "pass",
+      "ms": 271,
+      "detail": "User already registered"
+    },
+    {
+      "suite": "Auth",
+      "name": "signUp with a password under 6 chars is rejected",
+      "status": "pass",
+      "ms": 369,
+      "detail": "weak_password: Password should be at least 6 characters."
+    },
+    {
+      "suite": "Auth",
+      "name": "signUp with a malformed email is rejected",
+      "status": "pass",
+      "ms": 270,
+      "detail": "validation_failed: Unable to validate email address: invalid format"
+    },
+    {
+      "suite": "Auth",
+      "name": "getSession on a fresh client is null",
+      "status": "pass",
+      "ms": 1,
+      "detail": "null as expected"
+    },
+    {
+      "suite": "Auth",
+      "name": "signOut clears the session",
+      "status": "pass",
+      "ms": 679,
+      "detail": "session cleared"
+    },
+    {
+      "suite": "Auth",
+      "name": "a garbage JWT is rejected with 401",
+      "status": "pass",
+      "ms": 329,
+      "detail": "401 JWT cryptographic operation failed"
+    },
+    {
+      "suite": "Auth",
+      "name": "an expired JWT is rejected",
+      "status": "pass",
+      "ms": 272,
+      "detail": "401 as expected"
+    },
+    {
+      "suite": "Auth",
+      "name": "a request with no apikey at all is rejected",
+      "status": "pass",
+      "ms": 76,
+      "detail": "401"
+    }
+  ]
+}

@@ -1,0 +1,120 @@
+{
+  "at": "2026-07-16T09:53:28.239Z",
+  "pass": 16,
+  "fail": 0,
+  "error": 0,
+  "results": [
+    {
+      "suite": "Auth",
+      "name": "signIn with correct password returns a session",
+      "status": "pass",
+      "ms": 335,
+      "detail": "token len 896"
+    },
+    {
+      "suite": "Auth",
+      "name": "signIn with wrong password → LoginScreen shows \"wrong password\"",
+      "status": "pass",
+      "ms": 315,
+      "detail": "invalid_credentials: Invalid login credentials"
+    },
+    {
+      "suite": "Auth",
+      "name": "signIn as a user that does not exist → same generic message (no user enumeration)",
+      "status": "pass",
+      "ms": 948,
+      "detail": "Invalid login credentials"
+    },
+    {
+      "suite": "Auth",
+      "name": "signIn with empty password is rejected",
+      "status": "pass",
+      "ms": 330,
+      "detail": "invalid_credentials: Invalid login credentials"
+    },
+    {
+      "suite": "Auth",
+      "name": "signUp with a fresh mobile creates an account",
+      "status": "pass",
+      "ms": 308,
+      "detail": "user b5d559cc"
+    },
+    {
+      "suite": "Auth",
+      "name": "the signup trigger creates a profile AND its own society",
+      "status": "pass",
+      "ms": 651,
+      "detail": "society \"TEST Signup\" created, trial ends 2026-07-30"
+    },
+    {
+      "suite": "Auth",
+      "name": "a new signup gets a 14-day trial, so it starts UNLOCKED",
+      "status": "pass",
+      "ms": 706,
+      "detail": "14.0 day trial"
+    },
+    {
+      "suite": "Auth",
+      "name": "two separate signups land in DIFFERENT societies",
+      "status": "pass",
+      "ms": 754,
+      "detail": "each signup isolated"
+    },
+    {
+      "suite": "Auth",
+      "name": "signUp twice with the same mobile → LoginScreen shows \"already registered\"",
+      "status": "pass",
+      "ms": 275,
+      "detail": "User already registered"
+    },
+    {
+      "suite": "Auth",
+      "name": "signUp with a password under 6 chars is rejected",
+      "status": "pass",
+      "ms": 69,
+      "detail": "weak_password: Password should be at least 6 characters."
+    },
+    {
+      "suite": "Auth",
+      "name": "signUp with a malformed email is rejected",
+      "status": "pass",
+      "ms": 67,
+      "detail": "validation_failed: Unable to validate email address: invalid format"
+    },
+    {
+      "suite": "Auth",
+      "name": "getSession on a fresh client is null",
+      "status": "pass",
+      "ms": 1,
+      "detail": "null as expected"
+    },
+    {
+      "suite": "Auth",
+      "name": "signOut clears the session",
+      "status": "pass",
+      "ms": 420,
+      "detail": "session cleared"
+    },
+    {
+      "suite": "Auth",
+      "name": "a garbage JWT is rejected with 401",
+      "status": "pass",
+      "ms": 76,
+      "detail": "401 JWT cryptographic operation failed"
+    },
+    {
+      "suite": "Auth",
+      "name": "an expired JWT is rejected",
+      "status": "pass",
+      "ms": 65,
+      "detail": "401 as expected"
+    },
+    {
+      "suite": "Auth",
+      "name": "a request with no apikey at all is rejected",
+      "status": "pass",
+      "ms": 54,
+      "detail": "401"
+    }
+  ]
+}

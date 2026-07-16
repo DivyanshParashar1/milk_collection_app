@@ -1,0 +1,1142 @@
+{
+  "at": "2026-07-16T11:32:49.969Z",
+  "pass": 162,
+  "fail": 0,
+  "error": 0,
+  "results": [
+    {
+      "suite": "Auth",
+      "name": "signIn with correct password returns a session",
+      "status": "pass",
+      "ms": 372,
+      "detail": "token len 896"
+    },
+    {
+      "suite": "Auth",
+      "name": "signIn with wrong password → LoginScreen shows \"wrong password\"",
+      "status": "pass",
+      "ms": 257,
+      "detail": "invalid_credentials: Invalid login credentials"
+    },
+    {
+      "suite": "Auth",
+      "name": "signIn as a user that does not exist → same generic message (no user enumeration)",
+      "status": "pass",
+      "ms": 544,
+      "detail": "Invalid login credentials"
+    },
+    {
+      "suite": "Auth",
+      "name": "signIn with empty password is rejected",
+      "status": "pass",
+      "ms": 262,
+      "detail": "invalid_credentials: Invalid login credentials"
+    },
+    {
+      "suite": "Auth",
+      "name": "signUp with a fresh mobile creates an account",
+      "status": "pass",
+      "ms": 512,
+      "detail": "user 70ad0aff"
+    },
+    {
+      "suite": "Auth",
+      "name": "the signup trigger creates a profile AND its own society",
+      "status": "pass",
+      "ms": 835,
+      "detail": "society \"TEST Signup\" created, subscription_end_date null"
+    },
+    {
+      "suite": "Auth",
+      "name": "a new signup gets NO trial, so it starts LOCKED",
+      "status": "pass",
+      "ms": 976,
+      "detail": "no trial → locked from day 1"
+    },
+    {
+      "suite": "Auth",
+      "name": "two separate signups land in DIFFERENT societies",
+      "status": "pass",
+      "ms": 648,
+      "detail": "each signup isolated"
+    },
+    {
+      "suite": "Auth",
+      "name": "signUp twice with the same mobile → LoginScreen shows \"already registered\"",
+      "status": "pass",
+      "ms": 76,
+      "detail": "User already registered"
+    },
+    {
+      "suite": "Auth",
+      "name": "signUp with a password under 6 chars is rejected",
+      "status": "pass",
+      "ms": 77,
+      "detail": "weak_password: Password should be at least 6 characters."
+    },
+    {
+      "suite": "Auth",
+      "name": "signUp with a malformed email is rejected",
+      "status": "pass",
+      "ms": 73,
+      "detail": "validation_failed: Unable to validate email address: invalid format"
+    },
+    {
+      "suite": "Auth",
+      "name": "getSession on a fresh client is null",
+      "status": "pass",
+      "ms": 0,
+      "detail": "null as expected"
+    },
+    {
+      "suite": "Auth",
+      "name": "signOut clears the session",
+      "status": "pass",
+      "ms": 347,
+      "detail": "session cleared"
+    },
+    {
+      "suite": "Auth",
+      "name": "a garbage JWT is rejected with 401",
+      "status": "pass",
+      "ms": 91,
+      "detail": "401 JWT cryptographic operation failed"
+    },
+    {
+      "suite": "Auth",
+      "name": "an expired JWT is rejected",
+      "status": "pass",
+      "ms": 70,
+      "detail": "401 as expected"
+    },
+    {
+      "suite": "Auth",
+      "name": "a request with no apikey at all is rejected",
+      "status": "pass",
+      "ms": 34,
+      "detail": "401"
+    },
+    {
+      "suite": "RLS · anonymous (no session)",
+      "name": "anon cannot read members",
+      "status": "pass",
+      "ms": 238,
+      "detail": "filtered to 0 rows"
+    },
+    {
+      "suite": "RLS · anonymous (no session)",
+      "name": "anon cannot read milk_collections",
+      "status": "pass",
+      "ms": 74,
+      "detail": "filtered to 0 rows"
+    },
+    {
+      "suite": "RLS · anonymous (no session)",
+      "name": "anon cannot read ledger_entries",
+      "status": "pass",
+      "ms": 70,
+      "detail": "filtered to 0 rows"
+    },
+    {
+      "suite": "RLS · anonymous (no session)",
+      "name": "anon cannot read payouts",
+      "status": "pass",
+      "ms": 84,
+      "detail": "filtered to 0 rows"
+    },
+    {
+      "suite": "RLS · anonymous (no session)",
+      "name": "anon cannot read local_sales",
+      "status": "pass",
+      "ms": 68,
+      "detail": "filtered to 0 rows"
+    },
+    {
+      "suite": "RLS · anonymous (no session)",
+      "name": "anon cannot read union_sales",
+      "status": "pass",
+      "ms": 238,
+      "detail": "filtered to 0 rows"
+    },
+    {
+      "suite": "RLS · anonymous (no session)",
+      "name": "anon cannot read rate_charts",
+      "status": "pass",
+      "ms": 73,
+      "detail": "filtered to 0 rows"
+    },
+    {
+      "suite": "RLS · anonymous (no session)",
+      "name": "anon cannot read payments",
+      "status": "pass",
+      "ms": 87,
+      "detail": "filtered to 0 rows"
+    },
+    {
+      "suite": "RLS · anonymous (no session)",
+      "name": "anon cannot write members",
+      "status": "pass",
+      "ms": 77,
+      "detail": "42501: new row violates row-level security policy for table \"members\""
+    },
+    {
+      "suite": "RLS · anonymous (no session)",
+      "name": "anon cannot write milk_collections",
+      "status": "pass",
+      "ms": 62,
+      "detail": "42501: new row violates row-level security policy for table \"milk_collections\""
+    },
+    {
+      "suite": "RLS · anonymous (no session)",
+      "name": "anon cannot write ledger_entries",
+      "status": "pass",
+      "ms": 117,
+      "detail": "42501: new row violates row-level security policy for table \"ledger_entries\""
+    },
+    {
+      "suite": "RLS · anonymous (no session)",
+      "name": "anon cannot write payouts",
+      "status": "pass",
+      "ms": 59,
+      "detail": "42501: new row violates row-level security policy for table \"payouts\""
+    },
+    {
+      "suite": "RLS · anonymous (no session)",
+      "name": "anon cannot write local_sales",
+      "status": "pass",
+      "ms": 213,
+      "detail": "42501: new row violates row-level security policy for table \"local_sales\""
+    },
+    {
+      "suite": "RLS · anonymous (no session)",
+      "name": "anon cannot write union_sales",
+      "status": "pass",
+      "ms": 199,
+      "detail": "42501: new row violates row-level security policy for table \"union_sales\""
+    },
+    {
+      "suite": "RLS · anonymous (no session)",
+      "name": "anon cannot write rate_charts",
+      "status": "pass",
+      "ms": 84,
+      "detail": "42501: new row violates row-level security policy for table \"rate_charts\""
+    },
+    {
+      "suite": "RLS · anonymous (no session)",
+      "name": "anon cannot write payments",
+      "status": "pass",
+      "ms": 73,
+      "detail": "42501: new row violates row-level security policy for table \"payments\""
+    },
+    {
+      "suite": "RLS · anonymous (no session)",
+      "name": "anon cannot read societies",
+      "status": "pass",
+      "ms": 72,
+      "detail": "filtered to 0 rows"
+    },
+    {
+      "suite": "RLS · anonymous (no session)",
+      "name": "anon cannot read profiles",
+      "status": "pass",
+      "ms": 70,
+      "detail": "filtered to 0 rows"
+    },
+    {
+      "suite": "RLS · anonymous (no session)",
+      "name": "anon CAN read app_config (policy is USING(true) by design)",
+      "status": "pass",
+      "ms": 184,
+      "detail": "vpa readable: 7737115459@upi"
+    },
+    {
+      "suite": "RLS · cross-tenant (user A vs society B)",
+      "name": "A cannot SEE B's members row",
+      "status": "pass",
+      "ms": 289,
+      "detail": "filtered to 0 rows"
+    },
+    {
+      "suite": "RLS · cross-tenant (user A vs society B)",
+      "name": "A cannot SEE B's milk_collections row",
+      "status": "pass",
+      "ms": 240,
+      "detail": "filtered to 0 rows"
+    },
+    {
+      "suite": "RLS · cross-tenant (user A vs society B)",
+      "name": "A cannot SEE B's ledger_entries row",
+      "status": "pass",
+      "ms": 317,
+      "detail": "filtered to 0 rows"
+    },
+    {
+      "suite": "RLS · cross-tenant (user A vs society B)",
+      "name": "A cannot SEE B's payouts row",
+      "status": "pass",
+      "ms": 332,
+      "detail": "filtered to 0 rows"
+    },
+    {
+      "suite": "RLS · cross-tenant (user A vs society B)",
+      "name": "A cannot SEE B's local_sales row",
+      "status": "pass",
+      "ms": 383,
+      "detail": "filtered to 0 rows"
+    },
+    {
+      "suite": "RLS · cross-tenant (user A vs society B)",
+      "name": "A cannot SEE B's union_sales row",
+      "status": "pass",
+      "ms": 356,
+      "detail": "filtered to 0 rows"
+    },
+    {
+      "suite": "RLS · cross-tenant (user A vs society B)",
+      "name": "A cannot SEE B's rate_charts row",
+      "status": "pass",
+      "ms": 244,
+      "detail": "filtered to 0 rows"
+    },
+    {
+      "suite": "RLS · cross-tenant (user A vs society B)",
+      "name": "A cannot SEE B's payments row",
+      "status": "pass",
+      "ms": 296,
+      "detail": "filtered to 0 rows"
+    },
+    {
+      "suite": "RLS · cross-tenant (user A vs society B)",
+      "name": "A cannot INSERT into B's society (members)",
+      "status": "pass",
+      "ms": 315,
+      "detail": "42501: new row violates row-level security policy for table \"members\""
+    },
+    {
+      "suite": "RLS · cross-tenant (user A vs society B)",
+      "name": "A cannot INSERT into B's society (milk_collections)",
+      "status": "pass",
+      "ms": 346,
+      "detail": "42501: new row violates row-level security policy for table \"milk_collections\""
+    },
+    {
+      "suite": "RLS · cross-tenant (user A vs society B)",
+      "name": "A cannot INSERT into B's society (ledger_entries)",
+      "status": "pass",
+      "ms": 380,
+      "detail": "42501: new row violates row-level security policy for table \"ledger_entries\""
+    },
+    {
+      "suite": "RLS · cross-tenant (user A vs society B)",
+      "name": "A cannot INSERT into B's society (payouts)",
+      "status": "pass",
+      "ms": 236,
+      "detail": "42501: new row violates row-level security policy for table \"payouts\""
+    },
+    {
+      "suite": "RLS · cross-tenant (user A vs society B)",
+      "name": "A cannot INSERT into B's society (local_sales)",
+      "status": "pass",
+      "ms": 325,
+      "detail": "42501: new row violates row-level security policy for table \"local_sales\""
+    },
+    {
+      "suite": "RLS · cross-tenant (user A vs society B)",
+      "name": "A cannot INSERT into B's society (union_sales)",
+      "status": "pass",
+      "ms": 290,
+      "detail": "42501: new row violates row-level security policy for table \"union_sales\""
+    },
+    {
+      "suite": "RLS · cross-tenant (user A vs society B)",
+      "name": "A cannot INSERT into B's society (rate_charts)",
+      "status": "pass",
+      "ms": 372,
+      "detail": "42501: new row violates row-level security policy for table \"rate_charts\""
+    },
+    {
+      "suite": "RLS · cross-tenant (user A vs society B)",
+      "name": "A cannot INSERT into B's society (payments)",
+      "status": "pass",
+      "ms": 286,
+      "detail": "42501: new row violates row-level security policy for table \"payments\""
+    },
+    {
+      "suite": "RLS · cross-tenant (user A vs society B)",
+      "name": "A cannot UPDATE B's members row (silently affects 0 rows)",
+      "status": "pass",
+      "ms": 401,
+      "detail": "row untouched, 0 affected"
+    },
+    {
+      "suite": "RLS · cross-tenant (user A vs society B)",
+      "name": "A cannot UPDATE B's milk_collections row (silently affects 0 rows)",
+      "status": "pass",
+      "ms": 126,
+      "detail": "row untouched, 0 affected"
+    },
+    {
+      "suite": "RLS · cross-tenant (user A vs society B)",
+      "name": "A cannot UPDATE B's ledger_entries row (silently affects 0 rows)",
+      "status": "pass",
+      "ms": 318,
+      "detail": "row untouched, 0 affected"
+    },
+    {
+      "suite": "RLS · cross-tenant (user A vs society B)",
+      "name": "A cannot UPDATE B's payouts row (silently affects 0 rows)",
+      "status": "pass",
+      "ms": 132,
+      "detail": "row untouched, 0 affected"
+    },
+    {
+      "suite": "RLS · cross-tenant (user A vs society B)",
+      "name": "A cannot UPDATE B's local_sales row (silently affects 0 rows)",
+      "status": "pass",
+      "ms": 1146,
+      "detail": "row untouched, 0 affected"
+    },
+    {
+      "suite": "RLS · cross-tenant (user A vs society B)",
+      "name": "A cannot UPDATE B's union_sales row (silently affects 0 rows)",
+      "status": "pass",
+      "ms": 318,
+      "detail": "row untouched, 0 affected"
+    },
+    {
+      "suite": "RLS · cross-tenant (user A vs society B)",
+      "name": "A cannot UPDATE B's rate_charts row (silently affects 0 rows)",
+      "status": "pass",
+      "ms": 157,
+      "detail": "row untouched, 0 affected"
+    },
+    {
+      "suite": "RLS · cross-tenant (user A vs society B)",
+      "name": "A cannot UPDATE B's payments row (silently affects 0 rows)",
+      "status": "pass",
+      "ms": 319,
+      "detail": "row untouched, 0 affected"
+    },
+    {
+      "suite": "RLS · cross-tenant (user A vs society B)",
+      "name": "A cannot DELETE B's members row",
+      "status": "pass",
+      "ms": 135,
+      "detail": "row survived"
+    },
+    {
+      "suite": "RLS · cross-tenant (user A vs society B)",
+      "name": "A cannot DELETE B's milk_collections row",
+      "status": "pass",
+      "ms": 125,
+      "detail": "row survived"
+    },
+    {
+      "suite": "RLS · cross-tenant (user A vs society B)",
+      "name": "A cannot DELETE B's ledger_entries row",
+      "status": "pass",
+      "ms": 290,
+      "detail": "row survived"
+    },
+    {
+      "suite": "RLS · cross-tenant (user A vs society B)",
+      "name": "A cannot DELETE B's payouts row",
+      "status": "pass",
+      "ms": 133,
+      "detail": "row survived"
+    },
+    {
+      "suite": "RLS · cross-tenant (user A vs society B)",
+      "name": "A cannot DELETE B's local_sales row",
+      "status": "pass",
+      "ms": 117,
+      "detail": "row survived"
+    },
+    {
+      "suite": "RLS · cross-tenant (user A vs society B)",
+      "name": "A cannot DELETE B's union_sales row",
+      "status": "pass",
+      "ms": 255,
+      "detail": "row survived"
+    },
+    {
+      "suite": "RLS · cross-tenant (user A vs society B)",
+      "name": "A cannot DELETE B's rate_charts row",
+      "status": "pass",
+      "ms": 136,
+      "detail": "row survived"
+    },
+    {
+      "suite": "RLS · cross-tenant (user A vs society B)",
+      "name": "A cannot DELETE B's payments row",
+      "status": "pass",
+      "ms": 174,
+      "detail": "row survived"
+    },
+    {
+      "suite": "RLS · own tenant (positive path)",
+      "name": "A can insert + read back its own members",
+      "status": "pass",
+      "ms": 516,
+      "detail": "insert + select ok"
+    },
+    {
+      "suite": "RLS · own tenant (positive path)",
+      "name": "A can insert + read back its own milk_collections",
+      "status": "pass",
+      "ms": 967,
+      "detail": "insert + select ok"
+    },
+    {
+      "suite": "RLS · own tenant (positive path)",
+      "name": "A can insert + read back its own ledger_entries",
+      "status": "pass",
+      "ms": 628,
+      "detail": "insert + select ok"
+    },
+    {
+      "suite": "RLS · own tenant (positive path)",
+      "name": "A can insert + read back its own payouts",
+      "status": "pass",
+      "ms": 978,
+      "detail": "insert + select ok"
+    },
+    {
+      "suite": "RLS · own tenant (positive path)",
+      "name": "A can insert + read back its own local_sales",
+      "status": "pass",
+      "ms": 483,
+      "detail": "insert + select ok"
+    },
+    {
+      "suite": "RLS · own tenant (positive path)",
+      "name": "A can insert + read back its own union_sales",
+      "status": "pass",
+      "ms": 646,
+      "detail": "insert + select ok"
+    },
+    {
+      "suite": "RLS · own tenant (positive path)",
+      "name": "A can insert + read back its own rate_charts",
+      "status": "pass",
+      "ms": 777,
+      "detail": "insert + select ok"
+    },
+    {
+      "suite": "RLS · own tenant (positive path)",
+      "name": "A can insert + read back its own payments",
+      "status": "pass",
+      "ms": 972,
+      "detail": "insert + select ok"
+    },
+    {
+      "suite": "RLS · own tenant (positive path)",
+      "name": "A can read its own society row",
+      "status": "pass",
+      "ms": 178,
+      "detail": "is_active=true"
+    },
+    {
+      "suite": "RLS · own tenant (positive path)",
+      "name": "A cannot read B's society row",
+      "status": "pass",
+      "ms": 59,
+      "detail": "filtered to 0 rows"
+    },
+    {
+      "suite": "RLS · own tenant (positive path)",
+      "name": "A can read its own profile",
+      "status": "pass",
+      "ms": 66,
+      "detail": "ok"
+    },
+    {
+      "suite": "RLS · own tenant (positive path)",
+      "name": "A cannot read B's profile",
+      "status": "pass",
+      "ms": 236,
+      "detail": "filtered to 0 rows"
+    },
+    {
+      "suite": "RLS · own tenant (positive path)",
+      "name": "A cannot escalate itself to super admin",
+      "status": "pass",
+      "ms": 135,
+      "detail": "blocked"
+    },
+    {
+      "suite": "RLS · own tenant (positive path)",
+      "name": "A cannot move its profile to another society",
+      "status": "pass",
+      "ms": 128,
+      "detail": "blocked"
+    },
+    {
+      "suite": "RLS · own tenant (positive path)",
+      "name": "AFTER v7: a user can still rename themselves (not over-restricted)",
+      "status": "pass",
+      "ms": 353,
+      "detail": "full_name still writable"
+    },
+    {
+      "suite": "RLS · own tenant (positive path)",
+      "name": "AFTER v7: the super admin can still manage societies (not over-restricted)",
+      "status": "pass",
+      "ms": 1419,
+      "detail": "super admin retains societies write"
+    },
+    {
+      "suite": "RLS · own tenant (positive path)",
+      "name": "a normal user cannot write app_config (super-admin only)",
+      "status": "pass",
+      "ms": 72,
+      "detail": "42501: new row violates row-level security policy for table \"app_config\""
+    },
+    {
+      "suite": "RLS · own tenant (positive path)",
+      "name": "a normal user cannot extend their own subscription",
+      "status": "pass",
+      "ms": 147,
+      "detail": "blocked"
+    },
+    {
+      "suite": "RLS · own tenant (positive path)",
+      "name": "a normal user cannot approve their own payment request",
+      "status": "pass",
+      "ms": 447,
+      "detail": "allowed (status flip only; does not extend the subscription — approval still requires super admin)"
+    },
+    {
+      "suite": "RLS · own tenant (positive path)",
+      "name": "rate_chart_entries inherit their parent chart’s society",
+      "status": "pass",
+      "ms": 485,
+      "detail": "filtered to 0 rows; insert 42501: new row violates row-level security policy for table \"rate_chart_entries\""
+    },
+    {
+      "suite": "Constraints & validation",
+      "name": "duplicate (society_id, membercode) is rejected [23505]",
+      "status": "pass",
+      "ms": 698,
+      "detail": "23505: duplicate key value violates unique constraint \"members_society_id_membercode_key\""
+    },
+    {
+      "suite": "Constraints & validation",
+      "name": "the SAME membercode in a DIFFERENT society is allowed",
+      "status": "pass",
+      "ms": 316,
+      "detail": "allowed as expected"
+    },
+    {
+      "suite": "Constraints & validation",
+      "name": "member without a name is rejected [23502]",
+      "status": "pass",
+      "ms": 326,
+      "detail": "23502: null value in column \"name\" of relation \"members\" violates not-null constraint"
+    },
+    {
+      "suite": "Constraints & validation",
+      "name": "member pointing at a non-existent society is rejected",
+      "status": "pass",
+      "ms": 303,
+      "detail": "42501: new row violates row-level security policy for table \"members\""
+    },
+    {
+      "suite": "Constraints & validation",
+      "name": "non-numeric membercode is rejected [22P02]",
+      "status": "pass",
+      "ms": 326,
+      "detail": "22P02: invalid input syntax for type integer: \"abc\""
+    },
+    {
+      "suite": "Constraints & validation",
+      "name": "invalid collect_date is rejected",
+      "status": "pass",
+      "ms": 325,
+      "detail": "22008: date/time field value out of range: \"2026-02-31\""
+    },
+    {
+      "suite": "Constraints & validation",
+      "name": "garbage collect_date is rejected [22008]",
+      "status": "pass",
+      "ms": 309,
+      "detail": "22007: invalid input syntax for type date: \"not-a-date\""
+    },
+    {
+      "suite": "Constraints & validation",
+      "name": "malformed uuid in a filter is rejected [22P02]",
+      "status": "pass",
+      "ms": 321,
+      "detail": "22P02: invalid input syntax for type uuid: \"not-a-uuid\""
+    },
+    {
+      "suite": "Constraints & validation",
+      "name": "selecting a column that does not exist is rejected [42703]",
+      "status": "pass",
+      "ms": 361,
+      "detail": "42703: column members.no_such_column does not exist"
+    },
+    {
+      "suite": "Constraints & validation",
+      "name": "querying a table that does not exist is rejected [PGRST205]",
+      "status": "pass",
+      "ms": 234,
+      "detail": "PGRST205: Could not find the table 'public.no_such_table' in the schema cache"
+    },
+    {
+      "suite": "Constraints & validation",
+      "name": "local_sales without the NOT NULL sale_date is rejected [23502]",
+      "status": "pass",
+      "ms": 365,
+      "detail": "23502: null value in column \"sale_date\" of relation \"local_sales\" violates not-null constraint"
+    },
+    {
+      "suite": "Constraints & validation",
+      "name": "union_sales without quantity is rejected [23502]",
+      "status": "pass",
+      "ms": 319,
+      "detail": "23502: null value in column \"quantity\" of relation \"union_sales\" violates not-null constraint"
+    },
+    {
+      "suite": "Constraints & validation",
+      "name": "payout without a method is rejected [23502]",
+      "status": "pass",
+      "ms": 177,
+      "detail": "23502: null value in column \"method\" of relation \"payouts\" violates not-null constraint"
+    },
+    {
+      "suite": "Constraints & validation",
+      "name": "duplicate society code is rejected [23505]",
+      "status": "pass",
+      "ms": 145,
+      "detail": "23505: duplicate key value violates unique constraint \"societies_code_key\""
+    },
+    {
+      "suite": "Constraints & validation",
+      "name": "DOCUMENTS GAP: negative milk weight is accepted by the DB",
+      "status": "pass",
+      "ms": 325,
+      "detail": "ACCEPTED — no CHECK on weight; only the UI stops a negative entry"
+    },
+    {
+      "suite": "Constraints & validation",
+      "name": "DOCUMENTS GAP: fat of 999% is accepted by the DB",
+      "status": "pass",
+      "ms": 142,
+      "detail": "ACCEPTED — no CHECK on fat range"
+    },
+    {
+      "suite": "Constraints & validation",
+      "name": "DOCUMENTS GAP: payout method accepts any string, not just cash|upi",
+      "status": "pass",
+      "ms": 175,
+      "detail": "ACCEPTED — method is free text; 'cash'|'upi' is a convention, not a constraint"
+    },
+    {
+      "suite": "Constraints & validation",
+      "name": "DOCUMENTS GAP: ledger kind accepts any string, not just jama|udhar",
+      "status": "pass",
+      "ms": 181,
+      "detail": "ACCEPTED — kind is free text; ledgerBalance() sums by kind and would silently ignore this row"
+    },
+    {
+      "suite": "Constraints & validation",
+      "name": "a very long name is stored without truncation",
+      "status": "pass",
+      "ms": 72,
+      "detail": "text column, no length cap — 2000 chars round-tripped"
+    },
+    {
+      "suite": "Constraints & validation",
+      "name": "SQL injection in a text value is stored as literal text",
+      "status": "pass",
+      "ms": 153,
+      "detail": "stored literally; parameterised as expected"
+    },
+    {
+      "suite": "Constraints & validation",
+      "name": "unicode / Devanagari names round-trip intact",
+      "status": "pass",
+      "ms": 238,
+      "detail": "ok"
+    },
+    {
+      "suite": "Sync · pull cursor",
+      "name": "members is filterable on updated_at (pullAll cursor)",
+      "status": "pass",
+      "ms": 99,
+      "detail": "ok (0 rows)"
+    },
+    {
+      "suite": "Sync · pull cursor",
+      "name": "milk_collections is filterable on updated_at (pullAll cursor)",
+      "status": "pass",
+      "ms": 56,
+      "detail": "ok (0 rows)"
+    },
+    {
+      "suite": "Sync · pull cursor",
+      "name": "payouts is filterable on updated_at (pullAll cursor)",
+      "status": "pass",
+      "ms": 65,
+      "detail": "ok (0 rows)"
+    },
+    {
+      "suite": "Sync · pull cursor",
+      "name": "ledger_entries is filterable on updated_at (pullAll cursor)",
+      "status": "pass",
+      "ms": 65,
+      "detail": "ok (0 rows)"
+    },
+    {
+      "suite": "Sync · pull cursor",
+      "name": "local_sales is filterable on updated_at (pullAll cursor)",
+      "status": "pass",
+      "ms": 248,
+      "detail": "ok (0 rows)"
+    },
+    {
+      "suite": "Sync · pull cursor",
+      "name": "union_sales is filterable on updated_at (pullAll cursor)",
+      "status": "pass",
+      "ms": 74,
+      "detail": "ok (0 rows)"
+    },
+    {
+      "suite": "Sync · pull cursor",
+      "name": "REGRESSION: payouts has no created_at — the old cursor would 42703",
+      "status": "pass",
+      "ms": 56,
+      "detail": "confirmed: column payouts.created_at does not exist"
+    },
+    {
+      "suite": "Sync · pull cursor",
+      "name": "one bad table in the Promise.all fails the whole pull",
+      "status": "pass",
+      "ms": 91,
+      "detail": "first error wins → pulled=0 (42703)"
+    },
+    {
+      "suite": "Sync · pull cursor",
+      "name": "updated_at advances on UPDATE (the trigger fires)",
+      "status": "pass",
+      "ms": 1272,
+      "detail": "2026-07-16T11:32:33.291328+00:00 → 2026-07-16T11:32:34.492092+00:00"
+    },
+    {
+      "suite": "Sync · push idempotency",
+      "name": "members upsert on (society_id, membercode) is idempotent",
+      "status": "pass",
+      "ms": 426,
+      "detail": "same id, 1 row, value updated"
+    },
+    {
+      "suite": "Sync · push idempotency",
+      "name": "members upsert returns client_id so pushTable can map rows back",
+      "status": "pass",
+      "ms": 145,
+      "detail": "client_id round-trips"
+    },
+    {
+      "suite": "Sync · push idempotency",
+      "name": "milk_collections upsert on (society_id, client_id) is idempotent",
+      "status": "pass",
+      "ms": 240,
+      "detail": "retry-safe"
+    },
+    {
+      "suite": "Sync · push idempotency",
+      "name": "payouts upsert on (society_id, client_id) is idempotent",
+      "status": "pass",
+      "ms": 403,
+      "detail": "retry-safe"
+    },
+    {
+      "suite": "Sync · push idempotency",
+      "name": "ledger_entries upsert on (society_id, client_id) is idempotent",
+      "status": "pass",
+      "ms": 1221,
+      "detail": "retry-safe"
+    },
+    {
+      "suite": "Sync · push idempotency",
+      "name": "local_sales upsert on (society_id, client_id) is idempotent",
+      "status": "pass",
+      "ms": 1333,
+      "detail": "retry-safe"
+    },
+    {
+      "suite": "Sync · push idempotency",
+      "name": "union_sales upsert on (society_id, client_id) is idempotent",
+      "status": "pass",
+      "ms": 1597,
+      "detail": "retry-safe"
+    },
+    {
+      "suite": "Sync · push idempotency",
+      "name": "a 500-row batch upsert succeeds in one request (PUSH_CHUNK)",
+      "status": "pass",
+      "ms": 1261,
+      "detail": "500 rows in 722ms"
+    },
+    {
+      "suite": "Sync · push idempotency",
+      "name": "a batch with one bad row rejects the WHOLE batch (all-or-nothing)",
+      "status": "pass",
+      "ms": 307,
+      "detail": "rejected atomically (23502: null value in column \"name\" of relation \"members\" violates not-null constraint)"
+    },
+    {
+      "suite": "Sync · push idempotency",
+      "name": "pushing a row for a membercode that does not exist still succeeds",
+      "status": "pass",
+      "ms": 75,
+      "detail": "ACCEPTED — no FK on membercode; orphan collections are possible"
+    },
+    {
+      "suite": "Sync · edit & delete",
+      "name": "updating a synced collection by remote id works (saveCollectionEdit)",
+      "status": "pass",
+      "ms": 468,
+      "detail": "ok"
+    },
+    {
+      "suite": "Sync · edit & delete",
+      "name": "editing another society's collection silently no-ops (saveCollectionEdit reports success)",
+      "status": "pass",
+      "ms": 525,
+      "detail": "NO ERROR + 0 rows changed → a caller checking only `error` believes it succeeded"
+    },
+    {
+      "suite": "Sync · edit & delete",
+      "name": "deleting a collection by remote id works (deleteCollection)",
+      "status": "pass",
+      "ms": 195,
+      "detail": "deleted"
+    },
+    {
+      "suite": "Sync · rate chart backup/restore",
+      "name": "backupRateChart creates a Default chart then replaces its entries",
+      "status": "pass",
+      "ms": 830,
+      "detail": "61 → 0 → 10 round-trip ok"
+    },
+    {
+      "suite": "Sync · rate chart backup/restore",
+      "name": "defaultChartId uses maybeSingle — two Default charts would break .single()",
+      "status": "pass",
+      "ms": 548,
+      "detail": "DOCUMENTS GAP: duplicate Default charts are allowed and break restore → PGRST116: JSON object requested, multiple (or no) rows returned"
+    },
+    {
+      "suite": "Subscription · server facts",
+      "name": "pullAll reads subscription_end_date + is_active for an active dairy",
+      "status": "pass",
+      "ms": 258,
+      "detail": "ends 2026-08-15T11:31:55.017+00:00, locked=false"
+    },
+    {
+      "suite": "Subscription · server facts",
+      "name": "an expired + inactive dairy reports facts that lock the device",
+      "status": "pass",
+      "ms": 326,
+      "detail": "ends 2026-07-11T11:31:56.849+00:00, locked=true"
+    },
+    {
+      "suite": "Subscription · server facts",
+      "name": "an expired dairy can still PULL (renewal must be able to reach it)",
+      "status": "pass",
+      "ms": 135,
+      "detail": "pull allowed while locked"
+    },
+    {
+      "suite": "Subscription · server facts",
+      "name": "IMPORTANT: an expired dairy can still WRITE to the server (lock is client-only)",
+      "status": "pass",
+      "ms": 470,
+      "detail": "ACCEPTED — no server-side subscription enforcement; the lock lives only in the app"
+    },
+    {
+      "suite": "Subscription · lock predicate truth table",
+      "name": "active, ends in 30 days → unlocked",
+      "status": "pass",
+      "ms": 1,
+      "detail": "unlocked"
+    },
+    {
+      "suite": "Subscription · lock predicate truth table",
+      "name": "active, ends in 1 minute → unlocked",
+      "status": "pass",
+      "ms": 0,
+      "detail": "unlocked"
+    },
+    {
+      "suite": "Subscription · lock predicate truth table",
+      "name": "active, expired 1 minute ago → LOCKED",
+      "status": "pass",
+      "ms": 0,
+      "detail": "locked"
+    },
+    {
+      "suite": "Subscription · lock predicate truth table",
+      "name": "active, expired 5 days ago → LOCKED",
+      "status": "pass",
+      "ms": 0,
+      "detail": "locked"
+    },
+    {
+      "suite": "Subscription · lock predicate truth table",
+      "name": "INACTIVE but not yet expired → LOCKED",
+      "status": "pass",
+      "ms": 0,
+      "detail": "locked"
+    },
+    {
+      "suite": "Subscription · lock predicate truth table",
+      "name": "INACTIVE and expired → LOCKED",
+      "status": "pass",
+      "ms": 0,
+      "detail": "locked"
+    },
+    {
+      "suite": "Subscription · lock predicate truth table",
+      "name": "active, no end date set → LOCKED",
+      "status": "pass",
+      "ms": 0,
+      "detail": "locked"
+    },
+    {
+      "suite": "Subscription · lock predicate truth table",
+      "name": "INACTIVE, no end date set → LOCKED",
+      "status": "pass",
+      "ms": 0,
+      "detail": "locked"
+    },
+    {
+      "suite": "Subscription · lock predicate truth table",
+      "name": "EDGE: a fresh install with no subscription data is LOCKED",
+      "status": "pass",
+      "ms": 0,
+      "detail": "locked before first sync — the reinstall bypass is closed"
+    },
+    {
+      "suite": "Subscription · lock predicate truth table",
+      "name": "EDGE: a malformed subscriptionEnd does NOT lock (NaN comparison)",
+      "status": "pass",
+      "ms": 0,
+      "detail": "fails OPEN (unlocked) on corrupt data — safer for the farmer, weaker as a gate"
+    },
+    {
+      "suite": "Subscription · approval flow",
+      "name": "raiseSubscriptionRequest inserts a \"requested\" payment",
+      "status": "pass",
+      "ms": 639,
+      "detail": "request raised"
+    },
+    {
+      "suite": "Subscription · approval flow",
+      "name": "SuperAdminScreen.approve extends from the LATER of now / current end",
+      "status": "pass",
+      "ms": 0,
+      "detail": "early: +40d (10 kept), late: +30d from today"
+    },
+    {
+      "suite": "Subscription · approval flow",
+      "name": "approving a request actually unlocks the dairy",
+      "status": "pass",
+      "ms": 1272,
+      "detail": "locked → approved → unlocked"
+    },
+    {
+      "suite": "Subscription · approval flow",
+      "name": "toggling is_active=false locks an otherwise-valid dairy",
+      "status": "pass",
+      "ms": 960,
+      "detail": "kill switch works"
+    },
+    {
+      "suite": "Subscription · approval flow",
+      "name": "app_config exposes the payee VPA to signed-in users",
+      "status": "pass",
+      "ms": 329,
+      "detail": "vpa=7737115459@upi"
+    },
+    {
+      "suite": "Edge Function · razorpay-order",
+      "name": "the function is reachable",
+      "status": "pass",
+      "ms": 317,
+      "detail": "NOT DEPLOYED (404) — remaining edge tests are skipped. Nothing in the app calls it, so this is expected."
+    },
+    {
+      "suite": "Edge Function · razorpay-order",
+      "name": "CORS preflight (OPTIONS) is answered",
+      "status": "pass",
+      "ms": 0,
+      "detail": "skipped — function not deployed"
+    },
+    {
+      "suite": "Edge Function · razorpay-order",
+      "name": "missing amount → 400",
+      "status": "pass",
+      "ms": 0,
+      "detail": "skipped — function not deployed"
+    },
+    {
+      "suite": "Edge Function · razorpay-order",
+      "name": "amount = 0 → 400",
+      "status": "pass",
+      "ms": 0,
+      "detail": "skipped — function not deployed"
+    },
+    {
+      "suite": "Edge Function · razorpay-order",
+      "name": "negative amount → 400",
+      "status": "pass",
+      "ms": 0,
+      "detail": "skipped — function not deployed"
+    },
+    {
+      "suite": "Edge Function · razorpay-order",
+      "name": "non-numeric amount is rejected",
+      "status": "pass",
+      "ms": 0,
+      "detail": "skipped — function not deployed"
+    },
+    {
+      "suite": "Edge Function · razorpay-order",
+      "name": "unparseable body → 500 (not a crash)",
+      "status": "pass",
+      "ms": 0,
+      "detail": "skipped — function not deployed"
+    },
+    {
+      "suite": "Edge Function · razorpay-order",
+      "name": "empty body → error",
+      "status": "pass",
+      "ms": 0,
+      "detail": "skipped — function not deployed"
+    },
+    {
+      "suite": "Edge Function · razorpay-order",
+      "name": "GET is not accepted",
+      "status": "pass",
+      "ms": 0,
+      "detail": "skipped — function not deployed"
+    },
+    {
+      "suite": "Edge Function · razorpay-order",
+      "name": "SECURITY: does it mint an order with NO auth header?",
+      "status": "pass",
+      "ms": 0,
+      "detail": "skipped — function not deployed"
+    },
+    {
+      "suite": "Edge Function · razorpay-order",
+      "name": "a valid amount either mints an order or fails cleanly on missing secrets",
+      "status": "pass",
+      "ms": 0,
+      "detail": "skipped — function not deployed"
+    }
+  ]
+}
