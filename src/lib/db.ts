@@ -232,7 +232,7 @@ export async function insertMember(m: LocalMember) {
   await db.runAsync(
     `INSERT OR REPLACE INTO members
       (client_id, membercode, name, name_local, mobile1, animal_type, upi_id, bank_account, ifsc_code, fix_deduction, synced, updated_at)
-     VALUES (COALESCE((SELECT client_id FROM members WHERE membercode=?), ?), ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))`,
+     VALUES (COALESCE((SELECT client_id FROM members WHERE membercode=?), ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'))`,
     [
       m.membercode, newUUID(), // COALESCE: keep existing client_id on replace
       m.membercode,
