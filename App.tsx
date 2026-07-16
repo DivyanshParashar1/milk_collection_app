@@ -32,6 +32,8 @@ import UnionSaleScreen from './src/screens/UnionSaleScreen';
 import PaymentReportScreen from './src/screens/PaymentReportScreen';
 import SuperAdminScreen from './src/screens/SuperAdminScreen';
 import InventoryScreen from './src/screens/InventoryScreen';
+// TEMPORARY — dev-only simulation controller. See DEV_TESTING.md to remove.
+import DevScreen from './src/screens/DevScreen';
 
 const Stack = createNativeStackNavigator();
 const green = '#1b9c66';
@@ -102,6 +104,17 @@ function Root() {
           <Stack.Screen name="DatewiseReport" component={DatewiseReportScreen} options={{ title: 'Datewise · तारीखवार' }} />
           <Stack.Screen name="UnionSale" component={UnionSaleScreen} options={{ title: 'Union Sale · यूनियन' }} />
           <Stack.Screen name="PaymentReport" component={PaymentReportScreen} options={{ title: 'Payment Report · बिल' }} />
+          {/* TEMPORARY — dev-only. __DEV__ is false in release bundles, so the
+              route is never registered and the screen is unreachable in
+              production. (The module is still bundled as dead code; delete the
+              file + these two references to remove it — see DEV_TESTING.md.) */}
+          {__DEV__ && (
+            <Stack.Screen
+              name="Dev"
+              component={DevScreen}
+              options={{ title: '🧪 Dev Simulator', headerStyle: { backgroundColor: '#7a2f2f' } }}
+            />
+          )}
         </>
       )}
     </Stack.Navigator>

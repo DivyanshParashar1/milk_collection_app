@@ -144,6 +144,21 @@ export default function HomeScreen({ navigation }: any) {
             {locked && t.entry && <Text style={styles.tileLock}>🔒</Text>}
           </TouchableOpacity>
         ))}
+
+        {/* TEMPORARY dev entry point. __DEV__ is false in release bundles and
+            Metro strips the branch, so this tile cannot ship. Remove together
+            with DevScreen.tsx — see DEV_TESTING.md. */}
+        {__DEV__ && (
+          <TouchableOpacity
+            style={[styles.tile, { backgroundColor: '#7a2f2f' }]}
+            onPress={() => navigation.navigate('Dev')}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.tileIcon}>🧪</Text>
+            <Text style={styles.tileEn}>DEV</Text>
+            <Text style={styles.tileHi}>simulator</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <Text style={styles.hint}>दबाकर रखें = मदद · Press & hold any button for help</Text>
