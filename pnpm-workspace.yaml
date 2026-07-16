@@ -1,0 +1,15 @@
+# TEMPORARY — restore to 1440 after ~10:05 UTC / 15:35 IST on 2026-07-16.
+#
+# pnpm 11 (what EAS builders run) defaults minimumReleaseAge to 1440 minutes and
+# re-verifies the lockfile on every install. That rejects the Expo SDK 57.0.5/6
+# wave published 2026-07-15 ~10:00 UTC. Our `~57.0.x` ranges match no older
+# version, so the lockfile cannot resolve under the policy at all — regenerating
+# it fails with ERR_PNPM_NO_MATURE_MATCHING_VERSION rather than picking aged
+# releases.
+#
+# This must live here: pnpm ignores minimumReleaseAge in .npmrc and in
+# NPM_CONFIG_* env vars (both verified ignored by build f9c3edde).
+#
+# At 0, every build installs packages published seconds ago, with no cooldown
+# against npm account-compromise attacks. Put it back to 1440 once SDK 57 ages.
+minimumReleaseAge: 0
