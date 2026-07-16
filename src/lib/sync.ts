@@ -336,13 +336,13 @@ export async function pullAll(): Promise<{ pulled: number; error?: string }> {
       await saveSettings({ ...s, subscriptionEnd: soc.subscription_end_date, isActive: soc.is_active });
     }
 
-    // --- members ---
+    // --- members (has updated_at on server) ---
     const { data: members, error: e1 } = await supabase
       .from('members')
       .select('*')
       .eq('society_id', societyId)
-      .gt('created_at', lastPull)
-      .order('created_at');
+      .gt('updated_at', lastPull)
+      .order('updated_at');
     if (e1) return { pulled, error: e1.message };
     for (const m of members ?? []) { await upsertMemberFromServer(m); pulled++; }
 

@@ -188,6 +188,14 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
   return _db;
 }
 
+/** Return today's date as YYYY-MM-DD in IST (UTC+5:30). */
+export function todayIST(): string {
+  const now = new Date();
+  // IST = UTC + 5h 30m
+  const ist = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+  return ist.toISOString().slice(0, 10);
+}
+
 // ---------- Members ----------
 export type LocalMember = {
   membercode: number;
@@ -382,9 +390,11 @@ export async function deleteCollectionLocal(localId: number) {
 /** Today's totals for the dashboard. */
 export async function todayTotals(): Promise<{ litres: number; amount: number; count: number }> {
   const db = await getDb();
+  const today = todayIST();
   const row: any = await db.getFirstAsync(
     `SELECT COALESCE(SUM(weight),0) litres, COALESCE(SUM(price),0) amount, COUNT(*) count
-     FROM milk_collections WHERE collect_date = date('now')`
+     FROM milk_collections WHERE collect_date = ?`,
+    [today]
   );
   return { litres: row?.litres ?? 0, amount: row?.amount ?? 0, count: row?.count ?? 0 };
 }
@@ -568,7 +578,8 @@ export async function pendingCount(): Promise<number> {
   const c: any = await db.getFirstAsync(`SELECT COUNT(*) c FROM payouts WHERE synced = 0`);
   const d: any = await db.getFirstAsync(`SELECT COUNT(*) c FROM ledger_entries WHERE synced = 0`);
   const e: any = await db.getFirstAsync(`SELECT COUNT(*) c FROM local_sales WHERE synced = 0`);
-  return (a?.c ?? 0) + (b?.c ?? 0) + (c?.c ?? 0) + (d?.c ?? 0) + (e?.c ?? 0);
+  const f: any = await db.getFirstAsync(`SELECT COUNT(*) c FROM union_sales WHERE synced = 0`);
+  return (a?.c ?? 0) + (b?.c ?? 0) + (c?.c ?? 0) + (d?.c ?? 0) + (e?.c ?? 0) + (f?.c ?? 0);
 }
 
 // ---------- Ledger (Jama / Udhar) ----------
@@ -690,9 +701,11 @@ export async function recentLocalSales(limit = 30): Promise<any[]> {
 
 export async function todayLocalSaleTotals(): Promise<{ quantity: number; amount: number; count: number }> {
   const db = await getDb();
+  const today = todayIST();
   const r: any = await db.getFirstAsync(
     `SELECT COALESCE(SUM(quantity),0) quantity, COALESCE(SUM(amount),0) amount, COUNT(*) count
-     FROM local_sales WHERE sale_date = date('now')`
+     FROM local_sales WHERE sale_date = ?`,
+    [today]
   );
   return { quantity: r?.quantity ?? 0, amount: r?.amount ?? 0, count: r?.count ?? 0 };
 }
@@ -861,9 +874,11 @@ export async function recentUnionSales(limit = 20): Promise<any[]> {
 
 export async function todayUnionSaleTotals(): Promise<{ quantity: number; amount: number; count: number }> {
   const db = await getDb();
+  const today = todayIST();
   const r: any = await db.getFirstAsync(
     `SELECT COALESCE(SUM(quantity),0) quantity, COALESCE(SUM(amount),0) amount, COUNT(*) count
-     FROM union_sales WHERE sale_date = date('now')`
+     FROM union_sales WHERE sale_date = ?`,
+    [today]
   );
   return { quantity: r?.quantity ?? 0, amount: r?.amount ?? 0, count: r?.count ?? 0 };
 }
