@@ -51,7 +51,7 @@ export default function SettingsScreen() {
       <TextInput style={styles.input} value={s.societyName} onChangeText={(v) => setS({ ...s, societyName: v })} placeholder="My Dairy" placeholderTextColor="#9aa" />
 
       <View style={styles.switchRow}>
-        <Text style={styles.switchLabel}>Auto-print slip after each collection</Text>
+        <Text style={styles.switchLabel}>Auto-print slip on save (needs a printer below)</Text>
         <Switch value={s.autoPrintSlip} onValueChange={(v) => setS({ ...s, autoPrintSlip: v })} trackColor={{ true: '#1b9c66' }} />
       </View>
 
@@ -96,10 +96,10 @@ export default function SettingsScreen() {
       <View style={styles.divider} />
       <Text style={styles.section}>Bluetooth Thermal Printer</Text>
       {!isThermalAvailable() ? (
-        <Text style={styles.hint}>⚠️ Thermal printer module not available. Needs a dev-client / EAS build (not Expo Go) with react-native-thermal-printer installed.</Text>
+        <Text style={styles.hint}>⚠️ Bluetooth printing needs the installed app build (dev-client or APK) — it can't work in Expo Go.</Text>
       ) : (
         <>
-          <Text style={styles.hint}>Pair a BT thermal printer for auto-printing receipts on save.</Text>
+          <Text style={styles.hint}>Pair the printer in Android Bluetooth settings first, then pick it here. It is remembered on this phone — receipts then print straight to it.</Text>
           {s.btPrinterAddress ? (
             <View style={styles.printerCard}>
               <Text style={styles.printerName}>🖨️ {s.btPrinterName || 'Connected'}</Text>

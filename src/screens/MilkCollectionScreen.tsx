@@ -8,9 +8,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { computeMilk, RateEntry } from '../lib/calc';
 import { getMemberByCode, getRateChart, insertCollection, recentCollections, isSessionLocked, lockSession, unlockSession } from '../lib/db';
 import { getSettings } from '../lib/settings';
-import { printCollectionSlip } from '../lib/print';
 import { openCollectionSms, SlipData } from '../lib/sms';
-import { isThermalAvailable, printCollectionSlipBT } from '../lib/thermal';
+import { printCollectionSlipBT } from '../lib/thermal';
 import { useSubscription } from '../context/SubscriptionContext';
 
 const WALK_IN = 'Walk-in';
@@ -40,25 +39,31 @@ export default function MilkCollectionScreen({ route, navigation }: any) {
   const [smsEnabled, setSmsEnabled] = useState(true);
   const [btPrinter, setBtPrinter] = useState('');
   const [saving, setSaving] = useState(false);
+  const [printing, setPrinting] = useState(false);
   // `locked` here is the per-session lock (AM/PM), not the subscription lock.
   const [locked, setLocked] = useState(false);
   const sessionInit = useRef(false);
 
   const isWalkIn = !code.trim() || code.trim() === '0';
 
-  useEffect(() => {
-    getSettings().then((st) => {
-      setRounding(st.rounding);
-      setSocietyName(st.societyName);
-      setAutoPrint(st.autoPrintSlip);
-      setSmsEnabled(st.smsOnSave);
-      setBtPrinter(st.btPrinterAddress);
-      if (!sessionInit.current) {
-        setSession(new Date().getHours() < st.amCutoffHour ? 0 : 1);
-        sessionInit.current = true;
-      }
-    });
-  }, []);
+  // Reload on every focus, not just on mount: the operator picks their printer
+  // in Settings and comes straight back here, and a mount-only read would leave
+  // btPrinter stale (empty) until the screen was rebuilt.
+  useFocusEffect(
+    useCallback(() => {
+      getSettings().then((st) => {
+        setRounding(st.rounding);
+        setSocietyName(st.societyName);
+        setAutoPrint(st.autoPrintSlip);
+        setSmsEnabled(st.smsOnSave);
+        setBtPrinter(st.btPrinterAddress);
+        if (!sessionInit.current) {
+          setSession(new Date().getHours() < st.amCutoffHour ? 0 : 1);
+          sessionInit.current = true;
+        }
+      });
+    }, [])
+  );
 
   // Reload chart when animal type changes
   useFocusEffect(useCallback(() => { getRateChart(animalType).then((c) => setChart(c as RateEntry[])); }, [animalType]));
@@ -99,6 +104,41 @@ export default function MilkCollectionScreen({ route, navigation }: any) {
     [weight, fat, snf, deductionPct, chart, rounding]
   );
 
+  /**
+   * Print whatever is on screen right now, straight to the paired Bluetooth
+   * printer. Shared by the Print button and by auto-print-on-save, so both
+   * always put the same slip on the paper.
+   */
+  const printSlip = async (): Promise<{ error?: string }> => {
+    const c = isWalkIn ? 0 : parseInt(code, 10);
+    return printCollectionSlipBT(btPrinter, {
+      societyName,
+      date: new Date().toISOString().slice(0, 10),
+      session: session === 0 ? 'Morning' : 'Evening',
+      // A walk-in prints as "Walk-in" with no code; a farmer prints their name.
+      memberName: isWalkIn ? undefined : memberName ?? undefined,
+      membercode: c,
+      weight: calc.weight, fat: calc.fat, snf: calc.snf || undefined,
+      rate: calc.rate, amount: calc.price,
+    });
+  };
+
+  const onPrintPress = async () => {
+    if (!(parseFloat(weight) > 0)) return Alert.alert('Nothing to print', 'Enter the weight first.');
+    if (calc.rate === 0) return Alert.alert('No rate', 'No rate found for this fat. Check the rate chart.');
+    if (!btPrinter) {
+      return Alert.alert(
+        'No printer selected',
+        'Choose your Bluetooth thermal printer once in Settings — it is then remembered on this phone.',
+        [{ text: 'Not now', style: 'cancel' }, { text: 'Open Settings', onPress: () => navigation.navigate('Settings') }]
+      );
+    }
+    setPrinting(true);
+    const r = await printSlip();
+    setPrinting(false);
+    if (r.error) Alert.alert('Print failed', r.error);
+  };
+
   const save = async (sendSms: boolean) => {
     const c = isWalkIn ? 0 : parseInt(code, 10);
     if (c !== 0 && !memberName) return Alert.alert('Unknown member', `No member ${c}. Add them first.`);
@@ -130,24 +170,13 @@ export default function MilkCollectionScreen({ route, navigation }: any) {
         }
       }
 
-      // 2) Print next — Bluetooth thermal if configured, else OS print dialog
-      try {
-        if (btPrinter && isThermalAvailable()) {
-          const r = await printCollectionSlipBT(btPrinter, {
-            societyName, date: today, session: sessionLabel,
-            memberName: name, membercode: c,
-            weight: calc.weight, fat: calc.fat, snf: calc.snf || undefined, rate: calc.rate, amount: calc.price,
-          });
-          if (r.error) Alert.alert('Print error', r.error);
-        } else if (autoPrint) {
-          await printCollectionSlip({
-            society: societyName, date: today, session: sessionLabel,
-            code: c, name,
-            weight: calc.weight, fat: calc.fat, snf: calc.snf, rate: calc.rate, amount: calc.price,
-          });
-        }
-      } catch (e: any) {
-        Alert.alert('Print error', e?.message ?? String(e));
+      // 2) Print next — Bluetooth only, and only when auto-print is on.
+      // The OS print dialog used to be the fallback here; it always rendered a
+      // full-page sheet and needed taps, so slips never go through it now. If no
+      // printer is set up we stay silent — the Print button is the loud path.
+      if (autoPrint && btPrinter) {
+        const r = await printSlip();
+        if (r.error) Alert.alert('Print error', r.error);
       }
 
       // 3) Save to the local DB last
@@ -263,9 +292,20 @@ export default function MilkCollectionScreen({ route, navigation }: any) {
           </TouchableOpacity>
         ) : null}
         <TouchableOpacity style={[styles.btn, canSms ? styles.btnSave : styles.btnSaveFull]} onPress={() => save(false)} onLongPress={() => showHelp('Save', 'सेव करें', 'किसान के दूध की यह प्रविष्टि सुरक्षित करें।', "Save this farmer's milk entry.")} disabled={saving}>
-          {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>{isWalkIn ? '🧾 Save & Print' : '💾 Save'}</Text>}
+          {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>💾 Save</Text>}
         </TouchableOpacity>
       </View>
+
+      {/* Print stands alone and is always available — it goes straight to the
+          paired Bluetooth printer, never through the OS print sheet. */}
+      <TouchableOpacity
+        style={[styles.btn, styles.btnPrint]}
+        onPress={onPrintPress}
+        onLongPress={() => showHelp('Print', 'पर्ची छापें', 'यह पर्ची सीधे ब्लूटूथ प्रिंटर पर छापें।', 'Print this slip straight to the Bluetooth thermal printer.')}
+        disabled={printing}
+      >
+        {printing ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>🖨️ Print receipt</Text>}
+      </TouchableOpacity>
 
       {recent.length > 0 && (
         <>
@@ -334,6 +374,7 @@ const styles = StyleSheet.create({
   btnSms: { flex: 1.2, backgroundColor: '#2a6fdb' },
   btnSave: { flex: 0.8, backgroundColor: '#1b9c66' },
   btnSaveFull: { flex: 1, backgroundColor: '#1b9c66' },
+  btnPrint: { backgroundColor: '#0d7a86', marginTop: 10 },
   btnText: { color: '#fff', fontWeight: '800', fontSize: 17 },
   recentHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 24, marginBottom: 8 },
   recentTitle: { fontWeight: '800', color: '#0d1b2a', fontSize: 15 },

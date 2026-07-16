@@ -1,0 +1,16 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!--
+    Pre-Android-12 install-time permissions. maxSdkVersion keeps them off newer
+    devices, which use BLUETOOTH_CONNECT instead.
+  -->
+  <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+  <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+
+  <!--
+    Android 12+ runtime grant: needed to read paired devices and open the socket.
+    We deliberately do NOT request BLUETOOTH_SCAN — this module only ever talks
+    to printers the user already paired in Android settings, so we avoid
+    discovery and the location permission that would drag in.
+  -->
+  <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+</manifest>

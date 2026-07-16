@@ -1,12 +1,14 @@
 // ============================================================================
-// Printing & PDF export via expo-print (+ expo-sharing).
+// REPORT PDF export via expo-print (+ expo-sharing).
 //
-// - printCollectionSlip: opens the OS print sheet with a 58mm-style receipt.
-//   Works with any printer the phone can reach, including many Bluetooth
-//   thermal printers registered with Android's print service. (A dedicated
-//   ESC/POS Bluetooth driver can be added later for a specific printer model.)
-// - exportReportPdf: renders HTML to a PDF file and opens the share sheet
-//   (WhatsApp, email, Drive…).
+// Renders HTML to a PDF file and opens the share sheet (WhatsApp, email,
+// Drive…). Reports are meant for a full sheet, so expo-print's default page
+// size is what we want here.
+//
+// Collection SLIPS deliberately do NOT live here. They go straight to the
+// Bluetooth thermal printer as ESC/POS bytes — see lib/thermal.ts. Routing a
+// slip through expo-print meant the Android print sheet and a full-page
+// receipt, which is exactly what we moved away from; don't add it back.
 // ============================================================================
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
@@ -28,50 +30,6 @@ async function renderAndShare(html: string, dialogTitle: string): Promise<{ erro
 
 const esc = (s: any) =>
   String(s ?? '').replace(/[&<>]/g, (c) => (c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;'));
-
-export type SlipData = {
-  society: string;
-  date: string;
-  session: string;
-  code: number | string;
-  name: string;
-  weight: number;
-  fat: number;
-  snf: number;
-  rate: number;
-  amount: number;
-};
-
-export function collectionSlipHtml(d: SlipData): string {
-  const row = (a: string, b: string) =>
-    `<tr><td>${esc(a)}</td><td style="text-align:right">${esc(b)}</td></tr>`;
-  return `<html><head><meta name="viewport" content="width=device-width,initial-scale=1">
-  <style>
-    @page { margin: 4px; }
-    body { width: 280px; font-family: monospace; color:#000; font-size:13px; }
-    h2 { text-align:center; margin:2px 0; font-size:15px; }
-    .muted { text-align:center; font-size:11px; margin-bottom:6px; }
-    table { width:100%; border-collapse:collapse; }
-    td { padding:2px 0; }
-    .hr { border-top:1px dashed #000; margin:6px 0; }
-    .total { font-size:16px; font-weight:bold; }
-  </style></head><body>
-    <h2>${esc(d.society)}</h2>
-    <div class="muted">${esc(d.date)} &middot; ${esc(d.session)}</div>
-    <div class="hr"></div>
-    <table>
-      ${row('Farmer', `${esc(d.name)} (#${esc(d.code)})`)}
-      ${row('Weight (L)', d.weight.toFixed(2))}
-      ${row('Fat %', d.fat.toFixed(1))}
-      ${d.snf > 0 ? row('SNF %', d.snf.toFixed(1)) : ''}
-      ${row('Rate /L', `Rs ${d.rate.toFixed(2)}`)}
-    </table>
-    <div class="hr"></div>
-    <table><tr><td class="total">TOTAL</td><td class="total" style="text-align:right">Rs ${d.amount.toFixed(2)}</td></tr></table>
-    <div class="hr"></div>
-    <div class="muted">Thank you</div>
-  </body></html>`;
-}
 
 export type ReportData = {
   society: string;
@@ -128,15 +86,6 @@ export function reportHtml(d: ReportData): string {
       ${rows || '<tr><td colspan="4">No collections</td></tr>'}
     </table>
   </body></html>`;
-}
-
-export async function printCollectionSlip(d: SlipData): Promise<{ error?: string }> {
-  try {
-    await Print.printAsync({ html: collectionSlipHtml(d) });
-    return {};
-  } catch (e: any) {
-    return { error: String(e?.message ?? e) };
-  }
 }
 
 export async function exportReportPdf(d: ReportData): Promise<{ error?: string }> {

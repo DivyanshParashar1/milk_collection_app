@@ -5,7 +5,7 @@ import { computeMilk, RateEntry } from '../lib/calc';
 import { getCollection, getMemberByCode, getRateChart } from '../lib/db';
 import { saveCollectionEdit, deleteCollection } from '../lib/sync';
 import { getSettings } from '../lib/settings';
-import { printCollectionSlip } from '../lib/print';
+import { printCollectionSlipBT } from '../lib/thermal';
 import { useSubscription } from '../context/SubscriptionContext';
 
 export default function CollectionEditScreen({ route, navigation }: any) {
@@ -20,6 +20,7 @@ export default function CollectionEditScreen({ route, navigation }: any) {
   const [snf, setSnf] = useState('');
   const [rounding, setRounding] = useState<0 | 1 | 2>(0);
   const [societyName, setSocietyName] = useState('My Dairy');
+  const [btPrinter, setBtPrinter] = useState('');
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -27,6 +28,7 @@ export default function CollectionEditScreen({ route, navigation }: any) {
       const st = await getSettings();
       setRounding(st.rounding);
       setSocietyName(st.societyName);
+      setBtPrinter(st.btPrinterAddress);
       const r = await getCollection(localId);
       setRow(r);
       setWeight(String(r?.weight ?? ''));
@@ -75,14 +77,27 @@ export default function CollectionEditScreen({ route, navigation }: any) {
     ]);
   };
 
-  const reprint = () =>
-    printCollectionSlip({
-      society: societyName,
+  // Straight to the paired Bluetooth printer — this used to open the OS print
+  // sheet, which always rendered a full-page slip.
+  const reprint = async () => {
+    if (!btPrinter) {
+      return Alert.alert(
+        'No printer selected',
+        'Choose your Bluetooth thermal printer once in Settings — it is then remembered on this phone.',
+        [{ text: 'Not now', style: 'cancel' }, { text: 'Open Settings', onPress: () => navigation.navigate('Settings') }]
+      );
+    }
+    const { error } = await printCollectionSlipBT(btPrinter, {
+      societyName,
       date: row.collect_date,
       session: row.session === 0 ? 'Morning' : 'Evening',
-      code: row.membercode, name,
-      weight: calc.weight, fat: calc.fat, snf: calc.snf, rate: calc.rate, amount: calc.price,
+      memberName: row.membercode ? name : undefined,
+      membercode: row.membercode,
+      weight: calc.weight, fat: calc.fat, snf: calc.snf || undefined,
+      rate: calc.rate, amount: calc.price,
     });
+    if (error) Alert.alert('Print failed', error);
+  };
 
   if (!row) return <View style={styles.wrap} />;
 
