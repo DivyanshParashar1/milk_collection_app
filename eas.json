@@ -13,11 +13,17 @@
     },
     "preview": {
       "distribution": "internal",
+      "env": {
+        "NPM_CONFIG_MINIMUM_RELEASE_AGE": "0"
+      },
       "android": {
         "buildType": "apk"
       }
     },
     "production": {
+      "env": {
+        "NPM_CONFIG_MINIMUM_RELEASE_AGE": "0"
+      },
       "android": {
         "buildType": "apk"
       }
