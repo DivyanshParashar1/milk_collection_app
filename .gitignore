@@ -42,3 +42,7 @@ yarn-error.*
 
 # local secrets
 .env
+.env.test
+
+# api test output
+scripts/api-tests/logs/
