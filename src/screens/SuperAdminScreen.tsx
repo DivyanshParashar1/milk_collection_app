@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator, Alert, TextInput } from 'react-native';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { getPayConfig, setPayConfig, planDays } from '../lib/upiPay';
+import { getPayConfig, setPayConfig, planDays, FIRST_YEAR_PLAN } from '../lib/upiPay';
 
 export default function SuperAdminScreen() {
   const { signOut } = useAuth();
@@ -95,6 +95,11 @@ export default function SuperAdminScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.reqName}>{req.societies?.name ?? 'Unknown dairy'} <Text style={styles.reqCode}>#{req.societies?.code ?? '—'}</Text></Text>
             <Text style={styles.reqDetail}>₹{req.amount} · {req.plan ?? 'plan'} · {new Date(req.created_at).toLocaleDateString()}</Text>
+            {/* The app only offers a first-timer the joining plan, but approval is
+                where the money is actually decided — so say which dairies owe it. */}
+            {req.societies?.subscription_end_date == null && (
+              <Text style={styles.reqNew}>NEW DAIRY · expect ₹{FIRST_YEAR_PLAN.price} joining plan</Text>
+            )}
           </View>
           <TouchableOpacity style={[styles.reqBtn, styles.rejectBtn]} onPress={() => reject(req)}><Text style={styles.reqBtnText}>Reject</Text></TouchableOpacity>
           <TouchableOpacity style={[styles.reqBtn, styles.approveBtn]} onPress={() => approve(req)}><Text style={styles.reqBtnText}>Approve</Text></TouchableOpacity>
@@ -106,8 +111,11 @@ export default function SuperAdminScreen() {
   );
 
   const renderItem = ({ item }: { item: any }) => {
-    const expiryDate = new Date(item.subscription_end_date || Date.now());
-    const isExpired = expiryDate.getTime() < Date.now();
+    // A null end date is a dairy that has never subscribed — it owes the joining
+    // price, not a renewal. Worth showing as its own state rather than as an
+    // expiry of "today", which is what `|| Date.now()` used to render.
+    const expiryDate = item.subscription_end_date ? new Date(item.subscription_end_date) : null;
+    const isExpired = !expiryDate || expiryDate.getTime() < Date.now();
     return (
       <View style={styles.card}>
         <View style={styles.cardHeader}>
@@ -116,9 +124,9 @@ export default function SuperAdminScreen() {
         </View>
         <View style={styles.statusRow}>
           <Text style={[styles.statusBadge, item.is_active ? styles.statusActive : styles.statusInactive]}>{item.is_active ? 'ACTIVE' : 'INACTIVE'}</Text>
-          <Text style={[styles.statusBadge, isExpired ? styles.statusExpired : styles.statusActive]}>{isExpired ? 'EXPIRED' : 'SUBSCRIBED'}</Text>
+          <Text style={[styles.statusBadge, isExpired ? styles.statusExpired : styles.statusActive]}>{!expiryDate ? 'NEVER SUBSCRIBED' : isExpired ? 'EXPIRED' : 'SUBSCRIBED'}</Text>
         </View>
-        <Text style={styles.detail}>Expiry: {expiryDate.toLocaleDateString()}</Text>
+        <Text style={styles.detail}>Expiry: {expiryDate ? expiryDate.toLocaleDateString() : '—'}</Text>
         <Text style={styles.detail}>Created: {new Date(item.created_at).toLocaleDateString()}</Text>
         <View style={styles.actions}>
           <TouchableOpacity style={styles.actionBtn} onPress={() => addDays(item.id, item.subscription_end_date, 30)}><Text style={styles.actionText}>+30 Days</Text></TouchableOpacity>
@@ -168,6 +176,7 @@ const styles = StyleSheet.create({
   reqName: { fontSize: 15, fontWeight: '800', color: '#0d1b2a' },
   reqCode: { color: '#67788a', fontWeight: '600' },
   reqDetail: { color: '#67788a', fontSize: 12, marginTop: 2 },
+  reqNew: { color: '#8a6d1b', fontSize: 11, fontWeight: '800', marginTop: 3 },
   reqBtn: { paddingHorizontal: 12, paddingVertical: 10, borderRadius: 8 },
   rejectBtn: { backgroundColor: '#e74c3c' },
   approveBtn: { backgroundColor: '#1b9c66' },

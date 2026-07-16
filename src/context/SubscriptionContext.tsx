@@ -49,13 +49,15 @@ export function useSubscription() {
 
   const guard = useCallback((): boolean => {
     if (!ctx.locked) return true;
+    // Worded for both dairies that never subscribed and dairies that lapsed —
+    // they hit the same lock, and "expired" would be a lie to a new signup.
     Alert.alert(
-      'Subscription expired 🔒',
-      'सदस्यता समाप्त हो गई है। आप सब कुछ देख सकते हैं, पर नया डेटा नहीं जोड़ सकते।\n\n' +
-        'Your subscription has expired. You can still view everything, but adding or changing data is locked until you renew.',
+      'Subscription needed 🔒',
+      'डेटा जोड़ने या बदलने के लिए सक्रिय सदस्यता ज़रूरी है। आप सब कुछ देख सकते हैं, पर नया डेटा नहीं जोड़ सकते।\n\n' +
+        'Adding or changing data needs an active subscription. You can still view everything.',
       [
         { text: 'Later · बाद में', style: 'cancel' },
-        { text: 'Renew · नवीनीकरण', onPress: () => navigation.navigate('Subscription') },
+        { text: 'Subscribe · सदस्यता लें', onPress: () => navigation.navigate('Subscription') },
       ]
     );
     return false;
