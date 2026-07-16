@@ -41,6 +41,9 @@ importers:
       expo-sms:
         specifier: ~57.0.1
         version: 57.0.1(expo@57.0.6)
+      expo-splash-screen:
+        specifier: ~57.0.4
+        version: 57.0.4(expo@57.0.6)(typescript@6.0.3)
       expo-sqlite:
         specifier: ~57.0.1
         version: 57.0.1(expo@57.0.6)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3)
@@ -1277,6 +1280,11 @@ packages:
 
   expo-sms@57.0.1:
     resolution: {integrity: sha512-N5WGAA2Hw0nCGQIE8MAaL74ITwRhJdhtjIKryvExaGBxLXHZMgDD3kGdP4+feTo310kZBsGmXC5EtDqcrizE5Q==}
+    peerDependencies:
+      expo: '*'
+
+  expo-splash-screen@57.0.4:
+    resolution: {integrity: sha512-AspaOA5VZUl8yXb/BQORrRdOs0f7F/IgmvKNdCFaUDuz4X+j/4bPkkyssARFKwC5A5IQ3g7QS/Ve1XxDiDZ38Q==}
     peerDependencies:
       expo: '*'
 
@@ -3969,6 +3977,16 @@ snapshots:
   expo-sms@57.0.1(expo@57.0.6):
     dependencies:
       expo: 57.0.6(@babel/core@7.29.7)(@expo/dom-webview@57.0.1)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3)(typescript@6.0.3)
+
+  expo-splash-screen@57.0.4(expo@57.0.6)(typescript@6.0.3):
+    dependencies:
+      '@expo/config-plugins': 57.0.5(typescript@6.0.3)
+      '@expo/image-utils': 0.11.3(typescript@6.0.3)
+      expo: 57.0.6(@babel/core@7.29.7)(@expo/dom-webview@57.0.1)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3)(typescript@6.0.3)
+      xml2js: 0.6.0
+    transitivePeerDependencies:
+      - supports-color
+      - typescript
 
   expo-sqlite@57.0.1(expo@57.0.6)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(react@19.2.3))(react@19.2.3):
     dependencies:
