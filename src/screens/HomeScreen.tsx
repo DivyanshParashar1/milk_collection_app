@@ -19,7 +19,7 @@ const TILES: Tile[] = [
   { en: 'Pay Farmer', hi: 'भुगतान', icon: '💰', route: 'Payout', color: '#2a6fdb', entry: true, descHi: 'किसान को पैसे का भुगतान करें।', descEn: 'Pay money to a farmer.' },
   { en: 'Farmers', hi: 'किसान', icon: '👨‍🌾', route: 'MembersList', color: '#e0821b', descHi: 'किसानों की सूची देखें और नया जोड़ें।', descEn: 'View the farmer list and add new farmers.' },
   { en: 'Ledger', hi: 'जमा/उधार', icon: '📒', route: 'Ledger', color: '#6c5ce7', entry: true, descHi: 'जमा और उधार का हिसाब रखें।', descEn: 'Track deposits (jama) and credit (udhar).' },
-  { en: 'Local Sale', hi: 'स्थानीय बिक्री', icon: '🏪', route: 'LocalSales', color: '#d63031', entry: true, descHi: 'गाँव में सीधे ग्राहक को दूध बेचें।', descEn: 'Sell milk directly to local customers.' },
+  { en: 'Local Sale', hi: 'स्थानीय बिक्री', icon: '🏪', route: 'SaleHub', color: '#d63031', entry: true, descHi: 'गाँव में सीधे ग्राहक को दूध बेचें — तुरंत बिक्री या रोज़ की बिक्री।', descEn: 'Sell milk locally — walk-in sale or daily routine delivery.' },
   { en: 'Union Sale', hi: 'यूनियन बिक्री', icon: '🏭', route: 'UnionSale', color: '#5f27cd', entry: true, descHi: 'डेयरी यूनियन को दूध बेचें।', descEn: 'Sell milk to the dairy union.' },
   { en: 'Inventory', hi: 'भंडार', icon: '📦', route: 'Inventory', color: '#0d7a86', descHi: 'कितना दूध बचा है देखें और स्टॉक जोड़ें।', descEn: 'See how much milk is left and add stock.' },
   { en: 'Rate Chart', hi: 'रेट चार्ट', icon: '📋', route: 'RateChart', color: '#c0392b', descHi: 'फैट के अनुसार दूध की दर देखें।', descEn: 'See milk rates by fat / SNF.' },
@@ -70,7 +70,9 @@ export default function HomeScreen({ navigation }: any) {
       if (r.error) { setSyncError(r.error); await load(); setSyncing(false); return; }
       const p = await pullAll();
       if (p.error) setSyncError(p.error);
-      const pushed = r.pushedMembers + r.pushedCollections + r.pushedPayouts + r.pushedLedger + r.pushedLocalSales + r.pushedUnionSales;
+      const pushed = r.pushedMembers + r.pushedCollections + r.pushedPayouts + r.pushedLedger
+        + r.pushedLocalSales + r.pushedUnionSales
+        + r.pushedRoutineCustomers + r.pushedRoutineDeliveries + r.pushedRoutinePayments;
       const now = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
       await AsyncStorage.setItem(LAST_SYNC_KEY, now);
       setLastSync(now);

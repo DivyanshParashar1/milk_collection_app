@@ -5,7 +5,7 @@ import { inventoryTotals } from '../lib/db';
 import { showHelp } from '../lib/help';
 
 export default function InventoryScreen({ navigation }: any) {
-  const [inv, setInv] = useState({ collected: 0, unionSold: 0, localSold: 0, remaining: 0 });
+  const [inv, setInv] = useState({ collected: 0, unionSold: 0, localSold: 0, routineSold: 0, remaining: 0 });
 
   const load = useCallback(async () => {
     setInv(await inventoryTotals());
@@ -23,6 +23,7 @@ export default function InventoryScreen({ navigation }: any) {
       <View style={styles.rows}>
         <Row icon="🥛" hi="कुल संग्रह" en="Collected" value={`+${inv.collected.toFixed(1)}`} />
         <Row icon="🏪" hi="स्थानीय बिक्री" en="Local Sale" value={`-${inv.localSold.toFixed(1)}`} />
+        <Row icon="📋" hi="रोज़ की बिक्री" en="Routine Sale" value={`-${inv.routineSold.toFixed(1)}`} />
         <Row icon="🏭" hi="यूनियन बिक्री" en="Union Sale" value={`-${inv.unionSold.toFixed(1)}`} />
         <Row icon="📦" hi="बचा हुआ" en="Remaining" value={inv.remaining.toFixed(1)} strong />
       </View>

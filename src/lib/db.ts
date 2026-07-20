@@ -7,6 +7,7 @@
 // ============================================================================
 import * as SQLite from 'expo-sqlite';
 import { assertUnlocked } from './subscription';
+import { APP_VERSION } from './version';
 
 /** Generate a UUID v4 (works in Expo SDK 57+ which ships crypto.randomUUID). */
 function newUUID(): string {
@@ -164,18 +165,86 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
       synced       INTEGER DEFAULT 0,
       created_at   TEXT DEFAULT (datetime('now'))
     );
+
+    -- Remembered union defaults. Single row (id = 1): the operator sells to the
+    -- same union at the same fat rate every day and must not retype it.
+    CREATE TABLE IF NOT EXISTS union_sale_rates (
+      id         INTEGER PRIMARY KEY CHECK (id = 1),
+      fat_rate   REAL NOT NULL DEFAULT 0,   -- ₹ per fat point per litre
+      rate_basis TEXT NOT NULL DEFAULT 'fat', -- 'fat' | 'litre'
+      litre_rate REAL NOT NULL DEFAULT 0,   -- only used when basis = 'litre'
+      union_name TEXT
+    );
+
+    -- ---------- Routine (home delivery) sale ----------
+    -- Known customers who get milk delivered every day. Distinct from members:
+    -- these people BUY milk, farmers SELL it, and mixing them would put
+    -- customers into payouts and collection reports.
+    CREATE TABLE IF NOT EXISTS routine_customers (
+      local_id   INTEGER PRIMARY KEY AUTOINCREMENT,
+      remote_id  TEXT,
+      client_id  TEXT,
+      name       TEXT NOT NULL,
+      mobile     TEXT,
+      address    TEXT,
+      milk_type  TEXT DEFAULT 'mix',        -- cow | buff | mix
+      rate       REAL DEFAULT 0,            -- 0 = fall back to local_sale_rates
+      am_active  INTEGER DEFAULT 1,         -- delivered in the morning?
+      am_qty     REAL DEFAULT 0,            -- standing morning quantity (L)
+      pm_active  INTEGER DEFAULT 0,
+      pm_qty     REAL DEFAULT 0,
+      active     INTEGER DEFAULT 1,         -- 0 = stopped, keep history
+      synced     INTEGER DEFAULT 0,
+      updated_at TEXT DEFAULT (datetime('now')),
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+
+    -- One row per customer per date per session, written when the checklist is
+    -- saved. UNIQUE lets a re-save of the same checklist update instead of
+    -- duplicating the day.
+    CREATE TABLE IF NOT EXISTS routine_deliveries (
+      local_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+      remote_id     TEXT,
+      client_id     TEXT,
+      customer_id   INTEGER NOT NULL,       -- routine_customers.local_id
+      delivery_date TEXT NOT NULL,
+      session       INTEGER NOT NULL DEFAULT 0,  -- 0 = AM, 1 = PM
+      quantity      REAL NOT NULL DEFAULT 0,
+      rate          REAL NOT NULL DEFAULT 0,
+      amount        REAL NOT NULL DEFAULT 0,
+      synced        INTEGER DEFAULT 0,
+      updated_at    TEXT DEFAULT (datetime('now')),
+      created_at    TEXT DEFAULT (datetime('now')),
+      UNIQUE(customer_id, delivery_date, session)
+    );
+
+    -- Money received from a routine customer against their running account.
+    CREATE TABLE IF NOT EXISTS routine_payments (
+      local_id    INTEGER PRIMARY KEY AUTOINCREMENT,
+      remote_id   TEXT,
+      client_id   TEXT,
+      customer_id INTEGER NOT NULL,
+      amount      REAL NOT NULL,
+      method      TEXT NOT NULL DEFAULT 'cash',  -- 'cash' | 'upi'
+      note        TEXT,
+      paid_on     TEXT DEFAULT (date('now')),
+      synced      INTEGER DEFAULT 0,
+      updated_at  TEXT DEFAULT (datetime('now')),
+      created_at  TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_rd_customer_date ON routine_deliveries (customer_id, delivery_date);
+    CREATE INDEX IF NOT EXISTS idx_rd_date_session  ON routine_deliveries (delivery_date, session);
+    CREATE INDEX IF NOT EXISTS idx_rp_customer      ON routine_payments   (customer_id, paid_on);
+
+    -- Local schema bookkeeping (see runLocalMigrations below).
+    CREATE TABLE IF NOT EXISTS app_meta (
+      key   TEXT PRIMARY KEY,
+      value TEXT
+    );
   `);
 
-  // lightweight migrations for installs created before a column existed
-  // (ALTER throws if the column is already there — safe to ignore)
-  try { await _db.execAsync(`ALTER TABLE members ADD COLUMN upi_id TEXT`); } catch {}
-  try { await _db.execAsync(`ALTER TABLE members ADD COLUMN client_id TEXT`); } catch {}
-  try { await _db.execAsync(`ALTER TABLE payouts ADD COLUMN client_id TEXT`); } catch {}
-  try { await _db.execAsync(`ALTER TABLE milk_collections ADD COLUMN client_id TEXT`); } catch {}
-  try { await _db.execAsync(`ALTER TABLE ledger_entries ADD COLUMN client_id TEXT`); } catch {}
-  try { await _db.execAsync(`ALTER TABLE local_sales ADD COLUMN client_id TEXT`); } catch {}
-  try { await _db.execAsync(`ALTER TABLE union_sales ADD COLUMN client_id TEXT`); } catch {}
-  try { await _db.execAsync(`ALTER TABLE rate_chart_entries ADD COLUMN fat_type TEXT DEFAULT 'mix'`); } catch {}
+  await runLocalMigrations(_db);
 
   // Seed "Walk-in" member (code 0) so walk-in collections have a name in reports
   // Seed "Opening Stock" (code 9999) so added milk can be tracked as collection
@@ -187,6 +256,92 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
   } catch {}
 
   return _db;
+}
+
+// ============================================================================
+// Local schema migrations
+//
+// CREATE TABLE IF NOT EXISTS above handles fresh installs. This handles the
+// other case, which is now the common one: a phone that already has v1.0.0's
+// database and is being upgraded in place. Its tables exist, so CREATE does
+// nothing, and any column added later has to be ALTERed in.
+//
+// Each step is additive and idempotent, and the highest applied step number is
+// stored in app_meta so a launch that has nothing to do costs one SELECT
+// instead of a dozen ALTERs that all throw.
+//
+// Adding a step: append to the array and bump SCHEMA_VERSION in version.ts.
+// Never edit or remove an existing step — devices in the field have already
+// recorded it as applied and will never run it again.
+// ============================================================================
+const MIGRATIONS: { version: number; sql: string[] }[] = [
+  {
+    // v1 — everything that shipped as blind try/catch ALTERs in 1.0.0.
+    version: 1,
+    sql: [
+      `ALTER TABLE members ADD COLUMN upi_id TEXT`,
+      `ALTER TABLE members ADD COLUMN client_id TEXT`,
+      `ALTER TABLE payouts ADD COLUMN client_id TEXT`,
+      `ALTER TABLE milk_collections ADD COLUMN client_id TEXT`,
+      `ALTER TABLE ledger_entries ADD COLUMN client_id TEXT`,
+      `ALTER TABLE local_sales ADD COLUMN client_id TEXT`,
+      `ALTER TABLE union_sales ADD COLUMN client_id TEXT`,
+      `ALTER TABLE rate_chart_entries ADD COLUMN fat_type TEXT DEFAULT 'mix'`,
+    ],
+  },
+  {
+    // v2 (app 1.1.0) — union sale priced on fat.
+    //
+    // Existing rows default to 'litre' because that is exactly what 1.0.0
+    // wrote: amount = quantity × rate. Back-filling them to 'fat' would
+    // silently reinterpret every historical union sale.
+    version: 2,
+    sql: [
+      `ALTER TABLE union_sales ADD COLUMN rate_basis TEXT DEFAULT 'litre'`,
+      `ALTER TABLE union_sales ADD COLUMN fat_rate REAL DEFAULT 0`,
+    ],
+  },
+];
+
+async function runLocalMigrations(db: SQLite.SQLiteDatabase): Promise<void> {
+  // app_meta is created in the same execAsync as the tables, so it is always
+  // there by the time we get here — but a database from 1.0.0 has no row yet,
+  // and its ALTERs have effectively already been applied by the old
+  // try/catch code. Running them again is harmless: each one throws
+  // "duplicate column name" and is swallowed below.
+  let applied = 0;
+  try {
+    const row: any = await db.getFirstAsync(`SELECT value FROM app_meta WHERE key = 'schema_version'`);
+    applied = parseInt(row?.value ?? '0', 10) || 0;
+  } catch {}
+
+  for (const step of MIGRATIONS) {
+    if (step.version <= applied) continue;
+    for (const stmt of step.sql) {
+      // "duplicate column name" is expected on any device that already got
+      // this column from 1.0.0's untracked ALTERs. Anything else is a real
+      // problem, but throwing here would leave the app unable to open its own
+      // database — so we swallow and let the failing query surface it instead.
+      try { await db.execAsync(stmt); } catch {}
+    }
+    applied = step.version;
+  }
+
+  await db.runAsync(
+    `INSERT OR REPLACE INTO app_meta (key, value) VALUES ('schema_version', ?)`,
+    [String(applied)]
+  );
+  await db.runAsync(
+    `INSERT OR REPLACE INTO app_meta (key, value) VALUES ('app_version', ?)`,
+    [APP_VERSION]
+  );
+}
+
+/** The app version that last opened this database — useful in bug reports. */
+export async function getStoredAppVersion(): Promise<string | null> {
+  const db = await getDb();
+  const row: any = await db.getFirstAsync(`SELECT value FROM app_meta WHERE key = 'app_version'`);
+  return row?.value ?? null;
 }
 
 /**
@@ -423,19 +578,25 @@ export async function todayTotals(): Promise<{ litres: number; amount: number; c
 }
 
 /** Current Inventory (All-time sum) */
-export async function inventoryTotals(): Promise<{ collected: number; unionSold: number; localSold: number; remaining: number }> {
+export async function inventoryTotals(): Promise<{ collected: number; unionSold: number; localSold: number; routineSold: number; remaining: number }> {
   const db = await getDb();
   const col: any = await db.getFirstAsync(`SELECT COALESCE(SUM(weight),0) val FROM milk_collections`);
   const union: any = await db.getFirstAsync(`SELECT COALESCE(SUM(quantity),0) val FROM union_sales`);
   const local: any = await db.getFirstAsync(`SELECT COALESCE(SUM(quantity),0) val FROM local_sales`);
+  // Routine deliveries leave the tank exactly like a walk-in sale does, so
+  // they have to come off stock or remaining silently overstates itself by a
+  // few litres every single day.
+  const routine: any = await db.getFirstAsync(`SELECT COALESCE(SUM(quantity),0) val FROM routine_deliveries`);
   const collected = col?.val ?? 0;
   const unionSold = union?.val ?? 0;
   const localSold = local?.val ?? 0;
+  const routineSold = routine?.val ?? 0;
   return {
     collected,
     unionSold,
     localSold,
-    remaining: collected - unionSold - localSold,
+    routineSold,
+    remaining: collected - unionSold - localSold - routineSold,
   };
 }
 
@@ -604,7 +765,11 @@ export async function pendingCount(): Promise<number> {
   const d: any = await db.getFirstAsync(`SELECT COUNT(*) c FROM ledger_entries WHERE synced = 0`);
   const e: any = await db.getFirstAsync(`SELECT COUNT(*) c FROM local_sales WHERE synced = 0`);
   const f: any = await db.getFirstAsync(`SELECT COUNT(*) c FROM union_sales WHERE synced = 0`);
-  return (a?.c ?? 0) + (b?.c ?? 0) + (c?.c ?? 0) + (d?.c ?? 0) + (e?.c ?? 0) + (f?.c ?? 0);
+  const g: any = await db.getFirstAsync(`SELECT COUNT(*) c FROM routine_customers WHERE synced = 0`);
+  const h: any = await db.getFirstAsync(`SELECT COUNT(*) c FROM routine_deliveries WHERE synced = 0`);
+  const i: any = await db.getFirstAsync(`SELECT COUNT(*) c FROM routine_payments WHERE synced = 0`);
+  return (a?.c ?? 0) + (b?.c ?? 0) + (c?.c ?? 0) + (d?.c ?? 0) + (e?.c ?? 0) + (f?.c ?? 0)
+       + (g?.c ?? 0) + (h?.c ?? 0) + (i?.c ?? 0);
 }
 
 // ---------- Ledger (Jama / Udhar) ----------
@@ -889,15 +1054,58 @@ export type LocalUnionSale = {
   kg_snf: number;
   union_name?: string;
   note?: string;
+  /** 'fat' = priced per fat point per litre, 'litre' = flat ₹/L (pre-1.1.0). */
+  rate_basis?: UnionRateBasis;
+  /** ₹ per fat point per litre. Mirrors `rate` when basis is 'fat'. */
+  fat_rate?: number;
 };
 
 export async function insertUnionSale(s: LocalUnionSale) {
   assertUnlocked();
   const db = await getDb();
+  const basis = s.rate_basis ?? 'litre';
   await db.runAsync(
-    `INSERT INTO union_sales (client_id, sale_date, session, quantity, fat, snf, rate, amount, kg_fat, kg_snf, union_name, note, synced)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
-    [newUUID(), s.sale_date, s.session, s.quantity, s.fat, s.snf, s.rate, s.amount, s.kg_fat, s.kg_snf, s.union_name ?? null, s.note ?? null]
+    `INSERT INTO union_sales (client_id, sale_date, session, quantity, fat, snf, rate, amount, kg_fat, kg_snf, union_name, note, rate_basis, fat_rate, synced)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+    [newUUID(), s.sale_date, s.session, s.quantity, s.fat, s.snf, s.rate, s.amount, s.kg_fat, s.kg_snf, s.union_name ?? null, s.note ?? null, basis, s.fat_rate ?? 0]
+  );
+}
+
+// ---------- Union sale rates (remembered defaults) ----------
+export type UnionRateBasis = 'fat' | 'litre';
+export type UnionSaleRates = {
+  fat_rate: number;
+  litre_rate: number;
+  rate_basis: UnionRateBasis;
+  union_name: string;
+};
+
+const UNION_RATE_DEFAULTS: UnionSaleRates = { fat_rate: 0, litre_rate: 0, rate_basis: 'fat', union_name: '' };
+
+/**
+ * The operator sells to the same union at the same rate every single day, so
+ * these are stored once and auto-filled forever after. Always returns a value:
+ * a device that has never opened the rate screen gets the defaults.
+ */
+export async function getUnionSaleRates(): Promise<UnionSaleRates> {
+  const db = await getDb();
+  const r: any = await db.getFirstAsync(`SELECT * FROM union_sale_rates WHERE id = 1`);
+  if (!r) return { ...UNION_RATE_DEFAULTS };
+  return {
+    fat_rate: r.fat_rate ?? 0,
+    litre_rate: r.litre_rate ?? 0,
+    rate_basis: r.rate_basis === 'litre' ? 'litre' : 'fat',
+    union_name: r.union_name ?? '',
+  };
+}
+
+export async function setUnionSaleRates(v: UnionSaleRates) {
+  assertUnlocked();
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT OR REPLACE INTO union_sale_rates (id, fat_rate, litre_rate, rate_basis, union_name)
+     VALUES (1, ?, ?, ?, ?)`,
+    [v.fat_rate, v.litre_rate, v.rate_basis, v.union_name.trim() || null]
   );
 }
 
@@ -1026,8 +1234,402 @@ export async function upsertUnionSaleFromServer(r: any) {
   const existing = await db.getFirstAsync(`SELECT local_id FROM union_sales WHERE remote_id = ?`, [r.id]);
   if (existing) return;
   await db.runAsync(
-    `INSERT INTO union_sales (remote_id, sale_date, session, quantity, fat, snf, rate, amount, kg_fat, kg_snf, union_name, note, synced)
+    `INSERT INTO union_sales (remote_id, sale_date, session, quantity, fat, snf, rate, amount, kg_fat, kg_snf, union_name, note, rate_basis, fat_rate, synced)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+    // A row written by a 1.0.0 device has no rate_basis at all — it was priced
+    // per litre, so that is what it must come back down as.
+    [r.id, r.sale_date, r.session, r.quantity, r.fat, r.snf, r.rate, r.amount, r.kg_fat, r.kg_snf, r.union_name, r.note, r.rate_basis ?? 'litre', r.fat_rate ?? 0]
+  );
+}
+
+// ============================================================================
+// Routine sale — daily home delivery to known customers
+//
+// A routine customer is NOT a member: members sell milk to the dairy, routine
+// customers buy it. Keeping them in their own table is what stops them showing
+// up in payouts, collection reports and the farmer list.
+//
+// Money model: every delivery accrues to a running account and the customer
+// settles later (usually monthly), so a delivery is never "paid" in itself.
+// Outstanding = all deliveries ever − all payments ever.
+// ============================================================================
+
+export type RoutineCustomer = {
+  local_id?: number;
+  name: string;
+  mobile?: string;
+  address?: string;
+  milk_type: string;
+  rate: number;       // 0 = use the local sale rate for this milk type
+  am_active: number;  // SQLite has no boolean; 0 | 1
+  am_qty: number;
+  pm_active: number;
+  pm_qty: number;
+  active?: number;
+};
+
+export async function listRoutineCustomers(includeInactive = false): Promise<any[]> {
+  const db = await getDb();
+  return db.getAllAsync(
+    `SELECT * FROM routine_customers ${includeInactive ? '' : 'WHERE active = 1'} ORDER BY name COLLATE NOCASE`
+  );
+}
+
+export async function getRoutineCustomer(localId: number): Promise<any | null> {
+  const db = await getDb();
+  return db.getFirstAsync(`SELECT * FROM routine_customers WHERE local_id = ?`, [localId]);
+}
+
+export async function insertRoutineCustomer(c: RoutineCustomer): Promise<number> {
+  assertUnlocked();
+  const db = await getDb();
+  const r = await db.runAsync(
+    `INSERT INTO routine_customers (client_id, name, mobile, address, milk_type, rate, am_active, am_qty, pm_active, pm_qty, active, synced)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0)`,
+    [newUUID(), c.name, c.mobile ?? null, c.address ?? null, c.milk_type, c.rate, c.am_active, c.am_qty, c.pm_active, c.pm_qty]
+  );
+  return r.lastInsertRowId;
+}
+
+export async function updateRoutineCustomer(localId: number, c: RoutineCustomer) {
+  assertUnlocked();
+  const db = await getDb();
+  // synced = 0 so the edit is pushed on the next sync.
+  await db.runAsync(
+    `UPDATE routine_customers
+        SET name = ?, mobile = ?, address = ?, milk_type = ?, rate = ?,
+            am_active = ?, am_qty = ?, pm_active = ?, pm_qty = ?, active = ?,
+            synced = 0, updated_at = datetime('now')
+      WHERE local_id = ?`,
+    [c.name, c.mobile ?? null, c.address ?? null, c.milk_type, c.rate,
+     c.am_active, c.am_qty, c.pm_active, c.pm_qty, c.active ?? 1, localId]
+  );
+}
+
+/** Stop delivering to a customer without losing their history or balance. */
+export async function setRoutineCustomerActive(localId: number, active: boolean) {
+  assertUnlocked();
+  const db = await getDb();
+  await db.runAsync(
+    `UPDATE routine_customers SET active = ?, synced = 0, updated_at = datetime('now') WHERE local_id = ?`,
+    [active ? 1 : 0, localId]
+  );
+}
+
+/**
+ * The checklist for one date + session: every customer who is meant to get
+ * milk in that session, with their standing quantity and whatever was already
+ * saved for that day (so re-opening the screen shows the ticks again).
+ */
+export async function routineChecklist(date: string, session: 0 | 1): Promise<any[]> {
+  const db = await getDb();
+  const activeCol = session === 0 ? 'am_active' : 'pm_active';
+  const qtyCol = session === 0 ? 'am_qty' : 'pm_qty';
+  return db.getAllAsync(
+    `SELECT c.local_id, c.name, c.mobile, c.address, c.milk_type, c.rate,
+            c.${qtyCol} AS standing_qty,
+            d.local_id  AS delivery_id,
+            d.quantity  AS delivered_qty,
+            d.rate      AS delivered_rate,
+            d.amount    AS delivered_amount
+       FROM routine_customers c
+       LEFT JOIN routine_deliveries d
+              ON d.customer_id = c.local_id
+             AND d.delivery_date = ?
+             AND d.session = ?
+      WHERE c.active = 1 AND c.${activeCol} = 1
+      ORDER BY c.name COLLATE NOCASE`,
+    [date, session]
+  );
+}
+
+export type RoutineDeliveryInput = {
+  customer_id: number;
+  quantity: number;
+  rate: number;
+};
+
+/**
+ * Save one session's checklist.
+ *
+ * `rows` is only the customers that were ticked. Anyone previously saved for
+ * this date+session and now unticked is deleted, so correcting a mistaken tick
+ * actually removes the charge instead of leaving a zero-quantity row behind.
+ */
+export async function saveRoutineChecklist(
+  date: string,
+  session: 0 | 1,
+  rows: RoutineDeliveryInput[]
+): Promise<{ saved: number }> {
+  assertUnlocked();
+  const db = await getDb();
+  const keep = new Set(rows.map((r) => r.customer_id));
+
+  await withTransaction(async () => {
+    const existing: any[] = await db.getAllAsync(
+      `SELECT local_id, customer_id, remote_id FROM routine_deliveries WHERE delivery_date = ? AND session = ?`,
+      [date, session]
+    );
+    for (const e of existing) {
+      if (!keep.has(e.customer_id)) {
+        await db.runAsync(`DELETE FROM routine_deliveries WHERE local_id = ?`, [e.local_id]);
+        // A row that had already reached the server has to be removed there
+        // too; queue it so sync can do that once there is a connection.
+        //
+        // OR REPLACE, not plain INSERT: unticking the same customer twice
+        // before a sync would re-queue the same remote_id and a primary key
+        // conflict here would roll back the entire checklist save.
+        if (e.remote_id) {
+          await db.runAsync(
+            `INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)`,
+            [`deleted_delivery:${e.remote_id}`, date]
+          );
+        }
+      }
+    }
+
+    for (const r of rows) {
+      const amount = Math.round(r.quantity * r.rate * 100) / 100;
+      // ON CONFLICT keeps client_id/remote_id stable when a day is re-saved,
+      // so an edit updates the server row instead of creating a second one.
+      await db.runAsync(
+        `INSERT INTO routine_deliveries (client_id, customer_id, delivery_date, session, quantity, rate, amount, synced)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+         ON CONFLICT(customer_id, delivery_date, session)
+         DO UPDATE SET quantity = excluded.quantity, rate = excluded.rate,
+                       amount = excluded.amount, synced = 0,
+                       updated_at = datetime('now')`,
+        [newUUID(), r.customer_id, date, session, r.quantity, r.rate, amount]
+      );
+    }
+  });
+
+  return { saved: rows.length };
+}
+
+export async function routineDayTotals(date: string): Promise<{ quantity: number; amount: number; count: number }> {
+  const db = await getDb();
+  const r: any = await db.getFirstAsync(
+    `SELECT COALESCE(SUM(quantity),0) quantity, COALESCE(SUM(amount),0) amount, COUNT(*) count
+       FROM routine_deliveries WHERE delivery_date = ?`,
+    [date]
+  );
+  return { quantity: r?.quantity ?? 0, amount: r?.amount ?? 0, count: r?.count ?? 0 };
+}
+
+// ---------- Statement / balance ----------
+
+export type RoutineStatement = {
+  deliveries: any[];
+  payments: any[];
+  litres: number;
+  billed: number;
+  paid: number;
+  /** Lifetime balance, not just this month — what the customer actually owes. */
+  outstanding: number;
+};
+
+/**
+ * One customer's month, plus their true running balance.
+ *
+ * The listed rows are the chosen month, but `outstanding` deliberately spans
+ * all time: a customer who underpaid in June still owes it in July, and a
+ * month-scoped balance would quietly forgive it.
+ */
+export async function routineStatement(customerId: number, month: string): Promise<RoutineStatement> {
+  const db = await getDb();
+  const like = `${month}%`; // month = 'YYYY-MM'
+
+  const deliveries: any[] = await db.getAllAsync(
+    `SELECT * FROM routine_deliveries
+      WHERE customer_id = ? AND delivery_date LIKE ?
+      ORDER BY delivery_date, session`,
+    [customerId, like]
+  );
+  const payments: any[] = await db.getAllAsync(
+    `SELECT * FROM routine_payments
+      WHERE customer_id = ? AND paid_on LIKE ?
+      ORDER BY paid_on DESC, local_id DESC`,
+    [customerId, like]
+  );
+
+  const monthly: any = await db.getFirstAsync(
+    `SELECT COALESCE(SUM(quantity),0) litres, COALESCE(SUM(amount),0) billed
+       FROM routine_deliveries WHERE customer_id = ? AND delivery_date LIKE ?`,
+    [customerId, like]
+  );
+  const paidThisMonth: any = await db.getFirstAsync(
+    `SELECT COALESCE(SUM(amount),0) paid FROM routine_payments WHERE customer_id = ? AND paid_on LIKE ?`,
+    [customerId, like]
+  );
+
+  const lifetime: any = await db.getFirstAsync(
+    `SELECT
+       (SELECT COALESCE(SUM(amount),0) FROM routine_deliveries WHERE customer_id = ?) -
+       (SELECT COALESCE(SUM(amount),0) FROM routine_payments   WHERE customer_id = ?) AS outstanding`,
+    [customerId, customerId]
+  );
+
+  return {
+    deliveries,
+    payments,
+    litres: monthly?.litres ?? 0,
+    billed: monthly?.billed ?? 0,
+    paid: paidThisMonth?.paid ?? 0,
+    outstanding: Math.round((lifetime?.outstanding ?? 0) * 100) / 100,
+  };
+}
+
+/** Lifetime outstanding for every customer, for the list screen. */
+export async function routineOutstandingByCustomer(): Promise<Map<number, number>> {
+  const db = await getDb();
+  const rows: any[] = await db.getAllAsync(
+    `SELECT c.local_id,
+            COALESCE((SELECT SUM(amount) FROM routine_deliveries WHERE customer_id = c.local_id), 0) -
+            COALESCE((SELECT SUM(amount) FROM routine_payments   WHERE customer_id = c.local_id), 0) AS outstanding
+       FROM routine_customers c`
+  );
+  return new Map(rows.map((r) => [r.local_id, Math.round((r.outstanding ?? 0) * 100) / 100]));
+}
+
+export async function insertRoutinePayment(p: { customer_id: number; amount: number; method: string; note?: string; paid_on?: string }) {
+  assertUnlocked();
+  const db = await getDb();
+  await db.runAsync(
+    `INSERT INTO routine_payments (client_id, customer_id, amount, method, note, paid_on, synced)
+     VALUES (?, ?, ?, ?, ?, ?, 0)`,
+    [newUUID(), p.customer_id, p.amount, p.method, p.note ?? null, p.paid_on ?? todayIST()]
+  );
+}
+
+export async function deleteRoutinePayment(localId: number) {
+  assertUnlocked();
+  const db = await getDb();
+  await db.runAsync(`DELETE FROM routine_payments WHERE local_id = ?`, [localId]);
+}
+
+// ---------- Routine sync plumbing ----------
+
+export async function unsyncedRoutineCustomers(): Promise<any[]> {
+  const db = await getDb();
+  return db.getAllAsync(`SELECT * FROM routine_customers WHERE synced = 0`);
+}
+
+export async function markRoutineCustomerSynced(localId: number, remoteId: string) {
+  const db = await getDb();
+  await db.runAsync(`UPDATE routine_customers SET synced = 1, remote_id = ? WHERE local_id = ?`, [remoteId, localId]);
+}
+
+/**
+ * Deliveries whose customer already exists on the server.
+ *
+ * The join is the point: a delivery references its customer by the server's
+ * uuid, so a delivery for a customer that hasn't been pushed yet has nothing
+ * to point at. Those are simply left for the next sync, by which time the
+ * customer push (which runs first) will have given them a remote_id.
+ */
+export async function unsyncedRoutineDeliveries(): Promise<any[]> {
+  const db = await getDb();
+  return db.getAllAsync(
+    `SELECT d.*, c.remote_id AS customer_remote_id
+       FROM routine_deliveries d
+       JOIN routine_customers c ON c.local_id = d.customer_id
+      WHERE d.synced = 0 AND c.remote_id IS NOT NULL`
+  );
+}
+
+export async function markRoutineDeliverySynced(localId: number, remoteId: string) {
+  const db = await getDb();
+  await db.runAsync(`UPDATE routine_deliveries SET synced = 1, remote_id = ? WHERE local_id = ?`, [remoteId, localId]);
+}
+
+export async function unsyncedRoutinePayments(): Promise<any[]> {
+  const db = await getDb();
+  return db.getAllAsync(
+    `SELECT p.*, c.remote_id AS customer_remote_id
+       FROM routine_payments p
+       JOIN routine_customers c ON c.local_id = p.customer_id
+      WHERE p.synced = 0 AND c.remote_id IS NOT NULL`
+  );
+}
+
+export async function markRoutinePaymentSynced(localId: number, remoteId: string) {
+  const db = await getDb();
+  await db.runAsync(`UPDATE routine_payments SET synced = 1, remote_id = ? WHERE local_id = ?`, [remoteId, localId]);
+}
+
+/** remote_ids of deliveries deleted locally that still need deleting server-side. */
+export async function pendingDeliveryDeletions(): Promise<string[]> {
+  const db = await getDb();
+  const rows: any[] = await db.getAllAsync(
+    `SELECT key FROM app_meta WHERE key LIKE 'deleted_delivery:%'`
+  );
+  return rows.map((r) => String(r.key).slice('deleted_delivery:'.length));
+}
+
+export async function clearDeliveryDeletion(remoteId: string) {
+  const db = await getDb();
+  await db.runAsync(`DELETE FROM app_meta WHERE key = ?`, [`deleted_delivery:${remoteId}`]);
+}
+
+export async function upsertRoutineCustomerFromServer(r: any) {
+  const db = await getDb();
+  const existing: any = await db.getFirstAsync(
+    `SELECT local_id FROM routine_customers WHERE remote_id = ? OR client_id = ?`,
+    [r.id, r.client_id]
+  );
+  if (existing) {
+    await db.runAsync(
+      `UPDATE routine_customers
+          SET remote_id = ?, name = ?, mobile = ?, address = ?, milk_type = ?, rate = ?,
+              am_active = ?, am_qty = ?, pm_active = ?, pm_qty = ?, active = ?, synced = 1
+        WHERE local_id = ?`,
+      [r.id, r.name, r.mobile, r.address, r.milk_type ?? 'mix', r.rate ?? 0,
+       r.am_active ? 1 : 0, r.am_qty ?? 0, r.pm_active ? 1 : 0, r.pm_qty ?? 0,
+       r.active === false ? 0 : 1, existing.local_id]
+    );
+    return;
+  }
+  await db.runAsync(
+    `INSERT INTO routine_customers (remote_id, client_id, name, mobile, address, milk_type, rate, am_active, am_qty, pm_active, pm_qty, active, synced)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-    [r.id, r.sale_date, r.session, r.quantity, r.fat, r.snf, r.rate, r.amount, r.kg_fat, r.kg_snf, r.union_name, r.note]
+    [r.id, r.client_id, r.name, r.mobile, r.address, r.milk_type ?? 'mix', r.rate ?? 0,
+     r.am_active ? 1 : 0, r.am_qty ?? 0, r.pm_active ? 1 : 0, r.pm_qty ?? 0, r.active === false ? 0 : 1]
+  );
+}
+
+/** Map a server customer uuid to its local row, for pulled deliveries/payments. */
+async function localCustomerIdFor(remoteCustomerId: string): Promise<number | null> {
+  const db = await getDb();
+  const c: any = await db.getFirstAsync(`SELECT local_id FROM routine_customers WHERE remote_id = ?`, [remoteCustomerId]);
+  return c?.local_id ?? null;
+}
+
+export async function upsertRoutineDeliveryFromServer(r: any) {
+  const db = await getDb();
+  const customerId = await localCustomerIdFor(r.customer_id);
+  // Customers are pulled before deliveries, so a miss here means the customer
+  // row is genuinely gone; skipping beats inserting an orphan.
+  if (!customerId) return;
+  await db.runAsync(
+    `INSERT INTO routine_deliveries (remote_id, client_id, customer_id, delivery_date, session, quantity, rate, amount, synced)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
+     ON CONFLICT(customer_id, delivery_date, session)
+     DO UPDATE SET remote_id = excluded.remote_id, quantity = excluded.quantity,
+                   rate = excluded.rate, amount = excluded.amount, synced = 1`,
+    [r.id, r.client_id, customerId, r.delivery_date, r.session, r.quantity, r.rate, r.amount]
+  );
+}
+
+export async function upsertRoutinePaymentFromServer(r: any) {
+  const db = await getDb();
+  const existing = await db.getFirstAsync(`SELECT local_id FROM routine_payments WHERE remote_id = ?`, [r.id]);
+  if (existing) return;
+  const customerId = await localCustomerIdFor(r.customer_id);
+  if (!customerId) return;
+  await db.runAsync(
+    `INSERT INTO routine_payments (remote_id, client_id, customer_id, amount, method, note, paid_on, synced)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+    [r.id, r.client_id, customerId, r.amount, r.method, r.note, r.paid_on]
   );
 }

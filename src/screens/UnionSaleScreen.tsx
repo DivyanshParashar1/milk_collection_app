@@ -2,16 +2,17 @@ import React, { useCallback, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import KeyboardAwareScreen from "../components/KeyboardAwareScreen";
 import { useFocusEffect } from '@react-navigation/native';
-import { insertUnionSale, recentUnionSales, todayUnionSaleTotals } from '../lib/db';
+import { insertUnionSale, recentUnionSales, todayUnionSaleTotals, getUnionSaleRates, UnionRateBasis } from '../lib/db';
 import { useSubscription } from '../context/SubscriptionContext';
 
-export default function UnionSaleScreen() {
+export default function UnionSaleScreen({ navigation }: any) {
   const { guard } = useSubscription();
   const [session, setSession] = useState<0 | 1>(new Date().getHours() < 14 ? 0 : 1);
   const [quantity, setQuantity] = useState('');
   const [fat, setFat] = useState('');
   const [snf, setSnf] = useState('');
   const [rate, setRate] = useState('');
+  const [basis, setBasis] = useState<UnionRateBasis>('fat');
   const [unionName, setUnionName] = useState('');
   const [note, setNote] = useState('');
   const [recent, setRecent] = useState<any[]>([]);
@@ -23,20 +24,39 @@ export default function UnionSaleScreen() {
     setTotals(await todayUnionSaleTotals());
   };
 
-  useFocusEffect(useCallback(() => { loadRecent(); }, []));
+  useFocusEffect(useCallback(() => {
+    loadRecent();
+    // Rate and union name are set once on the rate screen and refilled here on
+    // every visit, so the operator never retypes them. Re-read on focus so
+    // coming back from editing the rate picks the new one up immediately.
+    getUnionSaleRates().then((r) => {
+      setBasis(r.rate_basis);
+      const saved = r.rate_basis === 'fat' ? r.fat_rate : r.litre_rate;
+      if (saved > 0) setRate(String(saved));
+      if (r.union_name) setUnionName(r.union_name);
+    });
+  }, []));
 
   const qty = parseFloat(quantity) || 0;
   const fv = parseFloat(fat) || 0;
   const sv = parseFloat(snf) || 0;
   const rv = parseFloat(rate) || 0;
-  const amount = qty * rv;
   const kgFat = qty * fv / 100;
   const kgSnf = qty * sv / 100;
+
+  // The whole point of this screen: the union buys fat, not volume. 100 L at
+  // 6.5 fat and ₹7 per fat = 100 × 6.5 × 7 = ₹4,550.
+  const amount = basis === 'fat' ? qty * fv * rv : qty * rv;
+  /** What one litre of this milk is worth — the number to sanity-check against. */
+  const effectivePerLitre = qty > 0 ? amount / qty : 0;
 
   const save = async () => {
     if (!guard()) return;
     if (!(qty > 0)) return Alert.alert('Missing', 'Enter quantity');
     if (!(rv > 0)) return Alert.alert('Missing', 'Enter rate');
+    if (basis === 'fat' && !(fv > 0)) {
+      return Alert.alert('Missing', 'Enter fat % — the amount is calculated from it.');
+    }
 
     setSaving(true);
     try {
@@ -52,6 +72,8 @@ export default function UnionSaleScreen() {
         kg_snf: Math.round(kgSnf * 1000) / 1000,
         union_name: unionName.trim() || undefined,
         note: note.trim() || undefined,
+        rate_basis: basis,
+        fat_rate: basis === 'fat' ? rv : 0,
       });
       setQuantity(''); setFat(''); setSnf(''); setNote('');
       await loadRecent();
@@ -86,12 +108,17 @@ export default function UnionSaleScreen() {
 
         <View style={styles.row3}>
           <View style={{ flex: 1 }}><Text style={styles.label}>Qty (L)</Text><TextInput style={styles.input} keyboardType="decimal-pad" value={quantity} onChangeText={setQuantity} placeholder="0" placeholderTextColor="#bcc" /></View>
-          <View style={{ flex: 1 }}><Text style={styles.label}>Fat %</Text><TextInput style={styles.input} keyboardType="decimal-pad" value={fat} onChangeText={setFat} placeholder="0" placeholderTextColor="#bcc" /></View>
+          <View style={{ flex: 1 }}><Text style={styles.label}>Fat %</Text><TextInput style={[styles.input, basis === 'fat' && styles.inputKey]} keyboardType="decimal-pad" value={fat} onChangeText={setFat} placeholder="0" placeholderTextColor="#bcc" /></View>
           <View style={{ flex: 1 }}><Text style={styles.label}>SNF %</Text><TextInput style={styles.input} keyboardType="decimal-pad" value={snf} onChangeText={setSnf} placeholder="0" placeholderTextColor="#bcc" /></View>
         </View>
 
-        <Text style={styles.label}>Rate ₹/L</Text>
+        <Text style={styles.label}>{basis === 'fat' ? 'Rate ₹ per fat / L' : 'Rate ₹/L'}</Text>
         <TextInput style={styles.input} keyboardType="decimal-pad" value={rate} onChangeText={setRate} placeholder="0" placeholderTextColor="#bcc" />
+        <Text style={styles.formula}>
+          {basis === 'fat'
+            ? `Amount = ${qty || 0} L × ${fv || 0} fat × ₹${rv || 0}`
+            : `Amount = ${qty || 0} L × ₹${rv || 0}`}
+        </Text>
 
         <Text style={styles.label}>Note (optional)</Text>
         <TextInput style={styles.input} value={note} onChangeText={setNote} placeholder="Can no., bill ref…" placeholderTextColor="#bcc" />
@@ -100,12 +127,17 @@ export default function UnionSaleScreen() {
         <View style={styles.calcBar}>
           <View style={styles.calcItem}><Text style={styles.calcVal}>{kgFat.toFixed(2)}</Text><Text style={styles.calcLbl}>kg Fat</Text></View>
           <View style={styles.calcItem}><Text style={styles.calcVal}>{kgSnf.toFixed(2)}</Text><Text style={styles.calcLbl}>kg SNF</Text></View>
+          <View style={styles.calcItem}><Text style={styles.calcVal}>₹{effectivePerLitre.toFixed(2)}</Text><Text style={styles.calcLbl}>per litre</Text></View>
           <View style={styles.calcItem}><Text style={[styles.calcVal, { color: '#43e08e' }]}>₹{amount.toFixed(0)}</Text><Text style={styles.calcLbl}>Amount</Text></View>
         </View>
       </View>
 
       <TouchableOpacity style={styles.btn} onPress={save} disabled={saving}>
         {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Save union sale</Text>}
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.rateLink} onPress={() => navigation.navigate('UnionSaleRate')}>
+        <Text style={styles.rateLinkText}>📋 Edit union rate</Text>
       </TouchableOpacity>
 
       {recent.length > 0 && (
@@ -115,7 +147,9 @@ export default function UnionSaleScreen() {
             <View key={r.local_id} style={styles.saleRow}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.saleName}>{r.union_name || 'Union'} · {r.session === 0 ? 'AM' : 'PM'}</Text>
-                <Text style={styles.saleDetail}>{r.quantity}L · Fat {r.fat}% · Rate ₹{r.rate} · {r.sale_date}</Text>
+                <Text style={styles.saleDetail}>
+                  {r.quantity}L · Fat {r.fat}% · ₹{r.rate}{r.rate_basis === 'fat' ? '/fat' : '/L'} · {r.sale_date}
+                </Text>
               </View>
               <Text style={styles.saleAmt}>₹{Number(r.amount).toFixed(0)}</Text>
               <Text style={r.synced ? styles.dotOk : styles.dotPending}>●</Text>
@@ -142,13 +176,18 @@ const styles = StyleSheet.create({
   card: { backgroundColor: '#fff', borderRadius: 16, padding: 16 },
   label: { color: '#4a5a6a', marginTop: 10, marginBottom: 6, fontWeight: '600', fontSize: 13 },
   input: { borderWidth: 1, borderColor: '#dde', borderRadius: 10, padding: 13, fontSize: 16, color: '#111' },
+  // Fat drives the price when the basis is fat, so it gets a visible accent.
+  inputKey: { borderColor: '#5f27cd', borderWidth: 2 },
+  formula: { color: '#8a97a6', fontSize: 12, marginTop: 6 },
   row3: { flexDirection: 'row', gap: 10 },
   calcBar: { flexDirection: 'row', backgroundColor: '#0d1b2a', borderRadius: 12, padding: 14, marginTop: 14 },
   calcItem: { flex: 1, alignItems: 'center' },
-  calcVal: { color: '#fff', fontWeight: '800', fontSize: 18 },
+  calcVal: { color: '#fff', fontWeight: '800', fontSize: 16 },
   calcLbl: { color: '#67788a', fontSize: 10, marginTop: 2 },
   btn: { backgroundColor: '#5f27cd', padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 16 },
   btnText: { color: '#fff', fontWeight: '800', fontSize: 17 },
+  rateLink: { alignItems: 'center', marginTop: 12 },
+  rateLinkText: { color: '#2a6fdb', fontWeight: '700', fontSize: 14 },
   section: { fontWeight: '800', color: '#0d1b2a', marginTop: 24, marginBottom: 8, fontSize: 15 },
   saleRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 10, padding: 12, marginBottom: 6, gap: 10 },
   saleName: { fontWeight: '700', color: '#0d1b2a', fontSize: 14 },

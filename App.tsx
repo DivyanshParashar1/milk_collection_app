@@ -24,8 +24,14 @@ import SettingsScreen from './src/screens/SettingsScreen';
 import SubscriptionScreen from './src/screens/SubscriptionScreen';
 import LedgerScreen from './src/screens/LedgerScreen';
 import MemberPassbookScreen from './src/screens/MemberPassbookScreen';
+import LocalSaleHubScreen from './src/screens/LocalSaleHubScreen';
 import LocalSalesScreen from './src/screens/LocalSalesScreen';
 import LocalSaleRateScreen from './src/screens/LocalSaleRateScreen';
+import RoutineSaleScreen from './src/screens/RoutineSaleScreen';
+import RoutineCustomersScreen from './src/screens/RoutineCustomersScreen';
+import RoutineCustomerFormScreen from './src/screens/RoutineCustomerFormScreen';
+import RoutineStatementScreen from './src/screens/RoutineStatementScreen';
+import UnionSaleRateScreen from './src/screens/UnionSaleRateScreen';
 import KapatScreen from './src/screens/KapatScreen';
 import DatewiseReportScreen from './src/screens/DatewiseReportScreen';
 import UnionSaleScreen from './src/screens/UnionSaleScreen';
@@ -96,11 +102,19 @@ function Root() {
           <Stack.Screen name="Subscription" component={SubscriptionScreen} options={{ title: 'Subscription' }} />
           <Stack.Screen name="Ledger" component={LedgerScreen} options={{ title: 'Ledger · जमा/उधार' }} />
           <Stack.Screen name="MemberPassbook" component={MemberPassbookScreen} options={{ title: 'Passbook · खाता' }} />
+          {/* The Home tile points at the hub; LocalSales is now the walk-in
+              screen behind it, reached from there. */}
+          <Stack.Screen name="SaleHub" component={LocalSaleHubScreen} options={{ title: 'Sale · बिक्री' }} />
           <Stack.Screen name="LocalSales" component={LocalSalesScreen} options={{ title: 'Local Sale · बिक्री' }} />
           <Stack.Screen name="LocalSaleRate" component={LocalSaleRateScreen} options={{ title: 'Sale Rates · दर' }} />
+          <Stack.Screen name="RoutineSale" component={RoutineSaleScreen} options={{ title: 'Routine Sale · रोज़' }} />
+          <Stack.Screen name="RoutineCustomers" component={RoutineCustomersScreen} options={{ title: 'Customers · ग्राहक' }} />
+          <Stack.Screen name="RoutineCustomerForm" component={RoutineCustomerFormScreen} options={{ title: 'Customer · ग्राहक' }} />
+          <Stack.Screen name="RoutineStatement" component={RoutineStatementScreen} options={{ title: 'Account · खाता' }} />
           <Stack.Screen name="Kapat" component={KapatScreen} options={{ title: 'Deductions · कपात' }} />
           <Stack.Screen name="DatewiseReport" component={DatewiseReportScreen} options={{ title: 'Datewise · तारीखवार' }} />
           <Stack.Screen name="UnionSale" component={UnionSaleScreen} options={{ title: 'Union Sale · यूनियन' }} />
+          <Stack.Screen name="UnionSaleRate" component={UnionSaleRateScreen} options={{ title: 'Union Rate · यूनियन दर' }} />
           <Stack.Screen name="PaymentReport" component={PaymentReportScreen} options={{ title: 'Payment Report · बिल' }} />
         </>
       )}

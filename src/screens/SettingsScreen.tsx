@@ -4,6 +4,7 @@ import KeyboardAwareScreen from "../components/KeyboardAwareScreen";
 import { getSettings, saveSettings, AppSettings, DEFAULT_SETTINGS } from '../lib/settings';
 import { backupRateChart, restoreRateChart } from '../lib/sync';
 import { isThermalAvailable, scanBluetoothPrinters, printTestPage, PrinterDevice } from '../lib/thermal';
+import { VERSION_LABEL } from '../lib/version';
 
 const ROUNDING = [
   { v: 0 as const, label: '2 decimals' },
@@ -137,6 +138,14 @@ export default function SettingsScreen() {
           ))}
         </>
       )}
+
+      {/* Version — the first thing to ask for when a user reports a problem,
+          since several APK versions are in the field at once. */}
+      <View style={styles.versionBox}>
+        <Text style={styles.versionText}>Neerja Milk Collection</Text>
+        <Text style={styles.versionNum}>{VERSION_LABEL}</Text>
+      </View>
+      <View style={{ height: 24 }} />
     </KeyboardAwareScreen>
   );
 }
@@ -146,6 +155,9 @@ const styles = StyleSheet.create({
   label: { color: '#4a5a6a', marginTop: 18, marginBottom: 6, fontWeight: '700', fontSize: 14 },
   input: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#dde', borderRadius: 10, padding: 13, fontSize: 16, color: '#111' },
   hint: { color: '#8a97a6', fontSize: 12, marginTop: 6 },
+  versionBox: { alignItems: 'center', marginTop: 30, paddingTop: 20, borderTopWidth: 1, borderTopColor: '#e3e8ed' },
+  versionText: { color: '#8a97a6', fontSize: 13, fontWeight: '600' },
+  versionNum: { color: '#b0bcc8', fontSize: 12, marginTop: 3 },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fff', borderRadius: 10, padding: 14, marginTop: 16 },
   switchLabel: { flex: 1, color: '#0d1b2a', fontWeight: '600', fontSize: 14 },
   segRow: { flexDirection: 'row', gap: 8 },

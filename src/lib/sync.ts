@@ -11,12 +11,23 @@ import {
   unsyncedLedgerEntries,
   unsyncedLocalSales,
   unsyncedUnionSales,
+  unsyncedRoutineCustomers,
+  unsyncedRoutineDeliveries,
+  unsyncedRoutinePayments,
   markMemberSynced,
   markCollectionSynced,
   markPayoutSynced,
   markLedgerSynced,
   markLocalSaleSynced,
   markUnionSaleSynced,
+  markRoutineCustomerSynced,
+  markRoutineDeliverySynced,
+  markRoutinePaymentSynced,
+  pendingDeliveryDeletions,
+  clearDeliveryDeletion,
+  upsertRoutineCustomerFromServer,
+  upsertRoutineDeliveryFromServer,
+  upsertRoutinePaymentFromServer,
   updateCollectionLocal,
   deleteCollectionLocal,
   CollectionValues,
@@ -41,6 +52,9 @@ export type SyncResult = {
   pushedLedger: number;
   pushedLocalSales: number;
   pushedUnionSales: number;
+  pushedRoutineCustomers: number;
+  pushedRoutineDeliveries: number;
+  pushedRoutinePayments: number;
   pulled: number;
   error?: string;
 };
@@ -113,30 +127,51 @@ async function pushTable<T extends { local_id: number; client_id: string }>(
 
 export async function pushAll(): Promise<SyncResult> {
   const societyId = await currentSocietyId();
-  const empty: SyncResult = { pushedMembers: 0, pushedCollections: 0, pushedPayouts: 0, pushedLedger: 0, pushedLocalSales: 0, pushedUnionSales: 0, pulled: 0 };
+  const empty: SyncResult = {
+    pushedMembers: 0, pushedCollections: 0, pushedPayouts: 0, pushedLedger: 0,
+    pushedLocalSales: 0, pushedUnionSales: 0, pushedRoutineCustomers: 0,
+    pushedRoutineDeliveries: 0, pushedRoutinePayments: 0, pulled: 0,
+  };
   if (!societyId) return { ...empty, error: 'Not signed in / no society set' };
 
   const result: SyncResult = { ...empty };
 
-  // Members go first, and alone: collections and payouts reference membercode,
-  // so the server must know the farmer before rows pointing at them arrive.
-  const members = await pushTable(
-    'members', 'society_id,membercode', await unsyncedMembers(),
-    (m) => ({
-      client_id: m.client_id, society_id: societyId, membercode: m.membercode,
-      name: m.name, name_local: m.name_local, mobile1: m.mobile1,
-      animal_type: m.animal_type, upi_id: m.upi_id, bank_account: m.bank_account,
-      ifsc_code: m.ifsc_code, fix_deduction: m.fix_deduction,
-    }),
-    markMemberSynced
-  );
+  // Members and routine customers go first, and together: everything below
+  // points at one or the other, so the server has to know them before rows
+  // referencing them arrive. They don't reference each other, so one round
+  // trip covers both.
+  const [members, routineCustomers] = await Promise.all([
+    pushTable(
+      'members', 'society_id,membercode', await unsyncedMembers(),
+      (m) => ({
+        client_id: m.client_id, society_id: societyId, membercode: m.membercode,
+        name: m.name, name_local: m.name_local, mobile1: m.mobile1,
+        animal_type: m.animal_type, upi_id: m.upi_id, bank_account: m.bank_account,
+        ifsc_code: m.ifsc_code, fix_deduction: m.fix_deduction,
+      }),
+      markMemberSynced
+    ),
+    pushTable(
+      'routine_customers', 'society_id,client_id', await unsyncedRoutineCustomers(),
+      (c) => ({
+        client_id: c.client_id, society_id: societyId, name: c.name,
+        mobile: c.mobile, address: c.address, milk_type: c.milk_type, rate: c.rate,
+        am_active: !!c.am_active, am_qty: c.am_qty,
+        pm_active: !!c.pm_active, pm_qty: c.pm_qty,
+        active: !!c.active,
+      }),
+      markRoutineCustomerSynced
+    ),
+  ]);
   result.pushedMembers = members.pushed;
+  result.pushedRoutineCustomers = routineCustomers.pushed;
   if (members.error) return { ...result, error: members.error };
+  if (routineCustomers.error) return { ...result, error: routineCustomers.error };
 
-  // The remaining five tables only depend on members, never on each other, so
+  // The remaining tables only depend on the two above, never on each other, so
   // they go out together — the same fix pullAll already had. Serially they cost
-  // five round-trips, which on a rural link is most of the wait.
-  const [cols, payouts, ledger, localSales, unionSales] = await Promise.all([
+  // a round-trip each, which on a rural link is most of the wait.
+  const [cols, payouts, ledger, localSales, unionSales, deliveries, routinePayments] = await Promise.all([
     pushTable(
       'milk_collections', 'society_id,client_id', await unsyncedCollections(),
       (c) => ({
@@ -180,8 +215,39 @@ export async function pushAll(): Promise<SyncResult> {
         session: u.session, quantity: u.quantity, fat: u.fat, snf: u.snf,
         rate: u.rate, amount: u.amount, kg_fat: u.kg_fat, kg_snf: u.kg_snf,
         union_name: u.union_name, note: u.note,
+        rate_basis: u.rate_basis ?? 'litre', fat_rate: u.fat_rate ?? 0,
       }),
       markUnionSaleSynced
+    ),
+    // customer_remote_id comes from the join in unsyncedRoutineDeliveries():
+    // rows whose customer hasn't reached the server yet are excluded there and
+    // picked up on the next sync, once the push above has given them an id.
+    //
+    // Conflict target is the natural key, NOT client_id: a delivery is one
+    // customer on one date in one session, and two devices saving that same
+    // day generate two different client_ids. On client_id the second push
+    // would hit the (customer_id, delivery_date, session) constraint and fail
+    // forever. On the natural key it updates the existing row — and since the
+    // payload carries client_id, the response comes back with the new one, so
+    // pushTable can still map it home.
+    pushTable(
+      'routine_deliveries', 'customer_id,delivery_date,session', await unsyncedRoutineDeliveries(),
+      (d) => ({
+        client_id: d.client_id, society_id: societyId,
+        customer_id: d.customer_remote_id,
+        delivery_date: d.delivery_date, session: d.session,
+        quantity: d.quantity, rate: d.rate, amount: d.amount,
+      }),
+      markRoutineDeliverySynced
+    ),
+    pushTable(
+      'routine_payments', 'society_id,client_id', await unsyncedRoutinePayments(),
+      (p) => ({
+        client_id: p.client_id, society_id: societyId,
+        customer_id: p.customer_remote_id,
+        amount: p.amount, method: p.method, note: p.note, paid_on: p.paid_on,
+      }),
+      markRoutinePaymentSynced
     ),
   ]);
 
@@ -190,13 +256,33 @@ export async function pushAll(): Promise<SyncResult> {
   result.pushedLedger = ledger.pushed;
   result.pushedLocalSales = localSales.pushed;
   result.pushedUnionSales = unionSales.pushed;
+  result.pushedRoutineDeliveries = deliveries.pushed;
+  result.pushedRoutinePayments = routinePayments.pushed;
+
+  // Unticking a delivery deletes it locally; the server copy has to go too, or
+  // the next pull would bring the charge straight back.
+  await pushDeliveryDeletions();
 
   // Rows that did push stay marked synced; report the first failure so the next
   // run retries only what's still dirty.
-  const failed = [cols, payouts, ledger, localSales, unionSales].find((r) => r.error);
+  const failed = [cols, payouts, ledger, localSales, unionSales, deliveries, routinePayments].find((r) => r.error);
   if (failed?.error) return { ...result, error: failed.error };
 
   return result;
+}
+
+/**
+ * Delete server rows for deliveries that were unticked while offline.
+ *
+ * The queue entry is only cleared once the server confirms, so a failure here
+ * just means the deletion is retried on the next sync rather than being lost.
+ */
+async function pushDeliveryDeletions(): Promise<void> {
+  const ids = await pendingDeliveryDeletions();
+  if (!ids.length) return;
+  const { error } = await supabase.from('routine_deliveries').delete().in('id', ids);
+  if (error) return;
+  for (const id of ids) await clearDeliveryDeletion(id);
 }
 
 // --- Edit / delete a collection, keeping local + server consistent ---------
@@ -304,7 +390,7 @@ export async function pullAll(): Promise<{ pulled: number; error?: string }> {
     const since = (table: string) =>
       supabase.from(table).select('*').eq('society_id', societyId).gt('updated_at', lastPull).order('updated_at');
 
-    const [soc, members, cols, payouts, ledger, lSales, uSales] = await Promise.all([
+    const [soc, members, cols, payouts, ledger, lSales, uSales, rCustomers, rDeliveries, rPayments] = await Promise.all([
       supabase.from('societies').select('subscription_end_date, is_active').eq('id', societyId).single(),
       since('members'),
       since('milk_collections'),
@@ -312,9 +398,12 @@ export async function pullAll(): Promise<{ pulled: number; error?: string }> {
       since('ledger_entries'),
       since('local_sales'),
       since('union_sales'),
+      since('routine_customers'),
+      since('routine_deliveries'),
+      since('routine_payments'),
     ]);
 
-    const failed = [members, cols, payouts, ledger, lSales, uSales].find((r) => r.error);
+    const failed = [members, cols, payouts, ledger, lSales, uSales, rCustomers, rDeliveries, rPayments].find((r) => r.error);
     if (failed?.error) return { pulled: 0, error: failed.error.message };
 
     // Subscription status drives the write lock, so refresh it immediately —
@@ -341,6 +430,11 @@ export async function pullAll(): Promise<{ pulled: number; error?: string }> {
       for (const l of ledger.data ?? []) { await upsertLedgerFromServer(l); pulled++; }
       for (const s of lSales.data ?? []) { await upsertLocalSaleFromServer(s); pulled++; }
       for (const u of uSales.data ?? []) { await upsertUnionSaleFromServer(u); pulled++; }
+      // Customers before their deliveries and payments — those resolve the
+      // customer by remote_id and skip rows they cannot match.
+      for (const c of rCustomers.data ?? []) { await upsertRoutineCustomerFromServer(c); pulled++; }
+      for (const d of rDeliveries.data ?? []) { await upsertRoutineDeliveryFromServer(d); pulled++; }
+      for (const p of rPayments.data ?? []) { await upsertRoutinePaymentFromServer(p); pulled++; }
     });
 
     await AsyncStorage.setItem(LAST_PULL_KEY, new Date().toISOString());
